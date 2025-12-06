@@ -19,10 +19,63 @@
 // MARK: ║    ContentView.swift   ║
 // MARK: ╚════════════════════════╝
 
+
 import SwiftUI
 import AppKit
 
+// Global menu bar status item for Coffein
+var coffeinStatusItem: NSStatusItem?
+
+/// Updates the menu bar icon & tooltip based on Coffein state
+func updateCoffeinStatusItem(isAwake: Bool) {
+    guard let button = coffeinStatusItem?.button else { return }
+
+    if isAwake {
+        // Active glyph only: 􁉘
+        let glyph = "􁉘"
+        let font = NSFont.systemFont(ofSize: 15)
+        let attributed = NSAttributedString(string: glyph, attributes: [
+            .font: font
+        ])
+
+        button.image = nil
+        button.title = ""
+        button.attributedTitle = attributed
+        button.toolTip = "Coffein: Active – your Mac won't sleep"
+    } else {
+        // Clear the glyph when off (leaves a tiny gap, but status item stays stable)
+        button.image = nil
+        button.title = ""
+        button.attributedTitle = NSAttributedString(string: "")
+        button.toolTip = "Coffein"
+    }
+}
+
+extension NSApplication {
+    /// Called from the status item to bring Coffein to the front
+    @objc func bringCoffeinToFront(_ sender: Any?) {
+        // Activate the app and bring the main window to the front
+        self.activate(ignoringOtherApps: true)
+        if let window = self.windows.first {
+            window.makeKeyAndOrderFront(nil)
+        }
+    }
+}
+
 struct ContentView: View {
+    enum TimerEndAction: String, CaseIterable, Identifiable {
+        case deactivate
+        case shutdown
+
+        var id: String { rawValue }
+
+        var label: String {
+            switch self {
+            case .deactivate: return "Deactivate Coffein"
+            case .shutdown:   return "Shut Down"
+            }
+        }
+    }
     @State private var isAwake = false
     @State private var isPressing = false
     @State private var hoverClose = false
@@ -36,6 +89,7 @@ struct ContentView: View {
     @State private var countdownTimer: Timer? = nil
     @State private var remainingSeconds: Int? = nil
     @State private var isTimerExpanded: Bool = false
+    @State private var timerEndAction: TimerEndAction = .deactivate
 
     var body: some View {
         ZStack {
@@ -51,7 +105,15 @@ struct ContentView: View {
                         .frame(width: 12, height: 12)
                         .onHover { hoverClose = $0 }
                         .animation(.easeInOut(duration: 0.15), value: hoverClose)
-                        .onTapGesture { NSApp.keyWindow?.close() }
+                        .onTapGesture {
+                            if isAwake {
+                                // When Coffein is active, just minimize the window
+                                NSApp.keyWindow?.miniaturize(nil)
+                            } else {
+                                // When Coffein is idle, close the app completely
+                                NSApp.terminate(nil)
+                            }
+                        }
 
                     // Minimize
                     Circle()
@@ -383,6 +445,30 @@ struct ContentView: View {
                                 applyCustomMinutes()
                             }
 
+                            // Action when timer ends – separate card under Custom
+                            VStack(spacing: 6) {
+                                HStack(spacing: 4) {
+                                    Text("When timer ends")
+                                        .font(.system(size: 11, weight: .medium))
+                                    Spacer()
+                                    Picker("When timer ends", selection: $timerEndAction) {
+                                        Text("Deactivate Coffein").tag(TimerEndAction.deactivate)
+                                        Text("Shut Down").tag(TimerEndAction.shutdown)
+                                    }
+                                    .labelsHidden()
+                                    .pickerStyle(.menu)  // dropdown style
+                                }
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .fill(Color.white.opacity(0.06))
+                            )
+                            .font(.system(size: 11))
+
+                            // Timer summary text at the bottom
                             Text(timerSummaryText)
                                 .font(.system(size: 11))
                                 .foregroundStyle(.secondary)
@@ -392,7 +478,7 @@ struct ContentView: View {
                 .padding(.top, 6)
 
                 // Footer tag
-                Text("v1.0 · arj4ng")
+                Text("v1.0 · Made by arj4ng")
                     .font(.system(size: 10, weight: .regular))
                     .foregroundStyle(.secondary)
                     .padding(.top, 6)
@@ -414,7 +500,26 @@ struct ContentView: View {
             .shadow(color: Color.black.opacity(0.6), radius: 24, x: 0, y: 18)
         }
         .onAppear {
+            // Detect initial state (in case caffeinate is already running)
             isAwake = isCaffeinateRunning()
+
+            // Always create the status item once; visibility is controlled by updateCoffeinStatusItem
+            if coffeinStatusItem == nil {
+                let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+
+                if let button = item.button {
+                    button.image = nil
+                    button.title = ""
+                    button.toolTip = "Coffein"
+                    button.target = NSApp
+                    button.action = #selector(NSApplication.bringCoffeinToFront(_:))
+                }
+
+                coffeinStatusItem = item
+            }
+
+            // Sync current state to the status item (will hide it if not awake)
+            updateCoffeinStatusItem(isAwake: isAwake)
 
             DispatchQueue.main.async {
                 if let window = NSApplication.shared.windows.first {
@@ -448,6 +553,10 @@ struct ContentView: View {
                     window.standardWindowButton(.zoomButton)?.isHidden = true
                 }
             }
+        }
+        .onChange(of: isAwake) { newValue in
+            // Status item is created once on appear; here we just update visibility & glyph
+            updateCoffeinStatusItem(isAwake: newValue)
         }
     }
 
@@ -503,8 +612,17 @@ struct ContentView: View {
 
         offTimer = Timer.scheduledTimer(withTimeInterval: duration, repeats: false) { _ in
             DispatchQueue.main.async {
-                isAwake = false
-                stopCaffeinate()
+                switch timerEndAction {
+                case .deactivate:
+                    // Current behavior: just turn Coffein off
+                    isAwake = false
+                    stopCaffeinate()
+                case .shutdown:
+                    // Stop caffeinate first, then shut down the Mac
+                    stopCaffeinate()
+                    _ = shell("osascript -e 'tell application \"System Events\" to shut down'")
+                }
+
                 remainingSeconds = nil
                 countdownTimer?.invalidate()
                 countdownTimer = nil
@@ -562,6 +680,7 @@ struct ContentView: View {
         return String(data: data, encoding: .utf8) ?? ""
     }
 }
+
 
 // Small helper to detect button press state
 private struct PressEventsModifier: ViewModifier {
