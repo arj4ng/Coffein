@@ -15,6 +15,6 @@ struct CoffeinApp: App {
         }
         .windowStyle(.hiddenTitleBar)          // hides toolbar
         .windowToolbarStyle(.unifiedCompact)   // prevents automatic chrome
-        .windowResizability(.automatic)
+        .windowResizability(.contentSize)
     }
 }

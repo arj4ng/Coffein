@@ -28,7 +28,6 @@ struct ContentView: View {
     @State private var hoverClose = false
     @State private var hoverMin = false
     @State private var hoverZoom = false
-    @State private var dragStart: NSPoint? = nil
 
     var body: some View {
         ZStack {
@@ -168,12 +167,12 @@ struct ContentView: View {
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                 }
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 4)
 
             }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 32)
-            .frame(width: 360, height: 260)
+            .padding(24)
+            .frame(width: 360)
             .background(
                 .ultraThinMaterial,
                 in: RoundedRectangle(cornerRadius: 24, style: .continuous)
@@ -183,26 +182,6 @@ struct ContentView: View {
                     .stroke(Color.white.opacity(0.15), lineWidth: 1)
             )
             .shadow(color: Color.black.opacity(0.6), radius: 24, x: 0, y: 18)
-            .contentShape(Rectangle())
-            .gesture(
-                DragGesture(minimumDistance: 3)
-                    .onChanged { value in
-                        if let window = NSApplication.shared.windows.first {
-                            if dragStart == nil {
-                                dragStart = window.frame.origin
-                            }
-                            if let start = dragStart {
-                                var frame = window.frame
-                                frame.origin.x = start.x + value.translation.width
-                                frame.origin.y = start.y - value.translation.height
-                                window.setFrame(frame, display: true)
-                            }
-                        }
-                    }
-                    .onEnded { _ in
-                        dragStart = nil
-                    }
-            )
         }
         .onAppear {
             isAwake = isCaffeinateRunning()
@@ -215,14 +194,25 @@ struct ContentView: View {
                     window.backgroundColor = .clear
                     window.hasShadow = false
 
-                    // Make the window borderless and non-resizable, content fills the whole frame
-                    window.styleMask = [.borderless, .fullSizeContentView]
+                    // Ensure content fills the full frame and the window is non-resizable
+                    var style = window.styleMask
+                    style.insert(.titled)
+                    style.insert(.fullSizeContentView)
+                    style.insert(.closable)
+                    style.insert(.miniaturizable)
+                    style.remove(.resizable)
+                    window.styleMask = style
+                    window.isMovableByWindowBackground = true
 
                     if let contentView = window.contentView {
-                        window.setContentSize(contentView.fittingSize)
+                        // Make sure layout is up-to-date before measuring
+                        contentView.layoutSubtreeIfNeeded()
+                        let size = contentView.fittingSize
+                        window.setContentSize(size)
+                        window.minSize = size
                     }
 
-                    // Hide native traffic lights (they may be nil for borderless, so this is safe)
+                    // Hide native traffic lights
                     window.standardWindowButton(.closeButton)?.isHidden = true
                     window.standardWindowButton(.miniaturizeButton)?.isHidden = true
                     window.standardWindowButton(.zoomButton)?.isHidden = true
