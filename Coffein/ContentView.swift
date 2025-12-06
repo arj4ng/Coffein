@@ -231,7 +231,7 @@ struct ContentView: View {
                     Text("Coffein Shot")
                         .font(.system(size: 18, weight: .semibold))
                     Text("Stop your Mac from sleeping")
-                        .font(.system(size: 12, weight: .regular))
+                        .font(.system(size: 14, weight: .regular))
                         .foregroundStyle(.secondary)
                 }
 
@@ -310,8 +310,8 @@ struct ContentView: View {
                         )
 
                     // Icon
-                    Image(systemName: isAwake ? "power.circle.fill" : "power")
-                        .font(.system(size: 34, weight: .regular))
+                    Image(systemName: isAwake ? "power.circle.fill" : "power.circle")
+                        .font(.system(size: 54, weight: .regular))
                         .foregroundColor(.white)
                 }
                 .scaleEffect(isPressing ? 0.96 : 1.0)
@@ -344,9 +344,9 @@ struct ContentView: View {
             // Description
             VStack(spacing: 4) {
                 Text(isAwake ? "Your Mac won't sleep while this is on" : "Your Mac can sleep normally")
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.system(size: 16, weight: .medium))
                 Text("Powered by the built-in `caffeinate` command to keep your Mac from dozing off.")
-                    .font(.system(size: 13))
+                    .font(.system(size: 14))
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
             }
