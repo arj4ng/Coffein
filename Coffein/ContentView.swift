@@ -29,6 +29,14 @@ struct ContentView: View {
     @State private var hoverMin = false
     @State private var hoverZoom = false
 
+    @State private var selectedDuration: TimeInterval? = nil
+    @State private var customHours: Int = 0
+    @State private var customMinutes: Int = 0
+    @State private var offTimer: Timer? = nil
+    @State private var countdownTimer: Timer? = nil
+    @State private var remainingSeconds: Int? = nil
+    @State private var isTimerExpanded: Bool = false
+
     var body: some View {
         ZStack {
             // Main card
@@ -101,7 +109,12 @@ struct ContentView: View {
                 // Power button
                 Button {
                     isAwake.toggle()
-                    if isAwake { runCaffeinate() } else { stopCaffeinate() }
+                    if isAwake {
+                        runCaffeinate()
+                    } else {
+                        stopCaffeinate()
+                    }
+                    scheduleOffTimerIfNeeded()
                 } label: {
                     ZStack {
                         // Soft pulsing ring when active
@@ -158,6 +171,27 @@ struct ContentView: View {
                 .pressEvents(onPress: { isPressing = true },
                              onRelease: { isPressing = false })
 
+                // Countdown display (only when a timer is active)
+                if let text = countdownDisplayText {
+                    HStack {
+                        Spacer()
+                        Text(text)
+                            .font(.system(size: 16, weight: .medium, design: .monospaced))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .fill(Color.black.opacity(0.35))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .stroke(Color.white.opacity(0.25), lineWidth: 1)
+                            )
+                        Spacer()
+                    }
+                    .padding(.top, 4)
+                }
+
                 // Description
                 VStack(spacing: 4) {
                     Text(isAwake ? "Your Mac won't sleep while this is on" : "Your Mac can sleep normally")
@@ -170,11 +204,199 @@ struct ContentView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 4)
 
+                // Auto-off timer (collapsible)
+                VStack(spacing: 6) {
+                    // Header row (collapsible toggle)
+                    Button {
+                        isTimerExpanded.toggle()
+                    } label: {
+                        HStack(spacing: 8) {
+                            Text("Auto turn off")
+                                .font(.system(size: 13, weight: .medium))
+                            Spacer()
+                            Text(selectedDuration == nil ? "Off" : timerSummaryText)
+                                .font(.system(size: 12))
+                                .foregroundStyle(.secondary)
+                            ZStack {
+                                Circle()
+                                    .fill(Color.white.opacity(0.10))
+                                Image(systemName: isTimerExpanded ? "chevron.up" : "chevron.down")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .frame(width: 20, height: 20)
+                        }
+                    }
+                    .buttonStyle(.plain)
+
+                    if isTimerExpanded {
+                        VStack(spacing: 8) {
+                            HStack(spacing: 10) {
+                                // Timer off circle button
+                                Button {
+                                    selectedDuration = nil
+                                    offTimer?.invalidate()
+                                    offTimer = nil
+                                    countdownTimer?.invalidate()
+                                    countdownTimer = nil
+                                    remainingSeconds = nil
+                                } label: {
+                                    Image(systemName: "stop.fill")
+                                        .font(.system(size: 16, weight: .semibold))
+                                        .foregroundColor(.primary)
+                                        .frame(width: 48, height: 48)
+                                        .background(
+                                            Circle()
+                                                .fill(selectedDuration == nil ? Color.white.opacity(0.22) : Color.white.opacity(0.08))
+                                        )
+                                }
+                                .buttonStyle(.plain)
+
+                                // 30 min preset
+                                Button {
+                                    selectedDuration = 30 * 60
+                                    scheduleOffTimerIfNeeded()
+                                } label: {
+                                    VStack(spacing: 2) {
+                                        Text("30")
+                                            .font(.system(size: 16, weight: .semibold))
+                                        Text("Min")
+                                            .font(.system(size: 10, weight: .medium))
+                                    }
+                                    .frame(width: 48, height: 48)
+                                    .background(
+                                        Circle()
+                                            .fill((selectedDuration == 30 * 60) ? Color.white.opacity(0.22) : Color.white.opacity(0.08))
+                                    )
+                                }
+                                .buttonStyle(.plain)
+
+                                // 1 h preset
+                                Button {
+                                    selectedDuration = 60 * 60
+                                    scheduleOffTimerIfNeeded()
+                                } label: {
+                                    VStack(spacing: 2) {
+                                        Text("1")
+                                            .font(.system(size: 16, weight: .semibold))
+                                        Text("Hr")
+                                            .font(.system(size: 10, weight: .medium))
+                                    }
+                                    .frame(width: 48, height: 48)
+                                    .background(
+                                        Circle()
+                                            .fill((selectedDuration == 60 * 60) ? Color.white.opacity(0.22) : Color.white.opacity(0.08))
+                                    )
+                                }
+                                .buttonStyle(.plain)
+
+                                // 2 h preset
+                                Button {
+                                    selectedDuration = 2 * 60 * 60
+                                    scheduleOffTimerIfNeeded()
+                                } label: {
+                                    VStack(spacing: 2) {
+                                        Text("2")
+                                            .font(.system(size: 16, weight: .semibold))
+                                        Text("Hr")
+                                            .font(.system(size: 10, weight: .medium))
+                                    }
+                                    .frame(width: 48, height: 48)
+                                    .background(
+                                        Circle()
+                                            .fill((selectedDuration == 2 * 60 * 60) ? Color.white.opacity(0.22) : Color.white.opacity(0.08))
+                                    )
+                                }
+                                .buttonStyle(.plain)
+
+                                // 3 h preset
+                                Button {
+                                    selectedDuration = 3 * 60 * 60
+                                    scheduleOffTimerIfNeeded()
+                                } label: {
+                                    VStack(spacing: 2) {
+                                        Text("3")
+                                            .font(.system(size: 16, weight: .semibold))
+                                        Text("Hr")
+                                            .font(.system(size: 10, weight: .medium))
+                                    }
+                                    .frame(width: 48, height: 48)
+                                    .background(
+                                        Circle()
+                                            .fill((selectedDuration == 3 * 60 * 60) ? Color.white.opacity(0.22) : Color.white.opacity(0.08))
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                            }
+                            .padding(.top, 4)
+
+                            // Custom time below presets
+                            HStack(spacing: 6) {
+                                Text("Custom")
+                                    .font(.system(size: 11, weight: .medium))
+                                Spacer()
+                                HStack(spacing: 16) {
+                                    // Hours column
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("Hours")
+                                            .font(.system(size: 10, weight: .regular))
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(1)
+                                        Picker("Hours", selection: $customHours) {
+                                            ForEach(0...24, id: \.self) { h in
+                                                Text("\(h)")
+                                                    .tag(h)
+                                            }
+                                        }
+                                        .labelsHidden()
+                                        .frame(width: 50)
+                                    }
+
+                                    // Minutes column
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("Minutes")
+                                            .font(.system(size: 10, weight: .regular))
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(1)
+                                        Picker("Minutes", selection: $customMinutes) {
+                                            ForEach(0...59, id: \.self) { m in
+                                                Text("\(m)")
+                                                    .tag(m)
+                                            }
+                                        }
+                                        .labelsHidden()
+                                        .frame(width: 60)
+                                    }
+                                }
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .fill(isCustomSelected ? Color.white.opacity(0.18) : Color.white.opacity(0.06))
+                            )
+                            .onChange(of: customHours) { _ in
+                                applyCustomMinutes()
+                            }
+                            .onChange(of: customMinutes) { _ in
+                                applyCustomMinutes()
+                            }
+
+                            Text(timerSummaryText)
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .padding(.top, 6)
+
                 // Footer tag
                 Text("v1.0 · arj4ng")
                     .font(.system(size: 10, weight: .regular))
                     .foregroundStyle(.secondary)
                     .padding(.top, 6)
+
 
             }
             .padding(.top, 24)
@@ -227,6 +449,86 @@ struct ContentView: View {
                 }
             }
         }
+    }
+
+    // MARK: - Timer helpers (UI)
+
+    private var countdownDisplayText: String? {
+        guard isAwake, let seconds = remainingSeconds, seconds > 0 else { return nil }
+
+        let hours = seconds / 3600
+        let minutes = (seconds % 3600) / 60
+        let secs = seconds % 60
+
+        if hours > 0 {
+            return String(format: "%02d:%02d:%02d", hours, minutes, secs)
+        } else {
+            return String(format: "%02d:%02d", minutes, secs)
+        }
+    }
+
+    private var isCustomSelected: Bool {
+        guard let selectedDuration else { return false }
+        let presets: [TimeInterval] = [30 * 60, 60 * 60, 2 * 60 * 60, 3 * 60 * 60]
+        return !presets.contains(selectedDuration)
+    }
+
+    private var timerSummaryText: String {
+        guard let selectedDuration else { return "Timer off" }
+        let minutes = Int(selectedDuration / 60)
+        if minutes < 60 {
+            return "Timer: \(minutes) minutes"
+        } else if minutes % 60 == 0 {
+            let hours = minutes / 60
+            return "Timer: \(hours) hour\(hours > 1 ? "s" : "")"
+        } else {
+            let hours = minutes / 60
+            let mins = minutes % 60
+            return "Timer: \(hours)h \(mins)m"
+        }
+    }
+
+    // MARK: - Timer helpers (logic)
+
+    func scheduleOffTimerIfNeeded() {
+        offTimer?.invalidate()
+        offTimer = nil
+        countdownTimer?.invalidate()
+        countdownTimer = nil
+        remainingSeconds = nil
+
+        guard isAwake, let duration = selectedDuration else { return }
+
+        remainingSeconds = Int(duration)
+
+        offTimer = Timer.scheduledTimer(withTimeInterval: duration, repeats: false) { _ in
+            DispatchQueue.main.async {
+                isAwake = false
+                stopCaffeinate()
+                remainingSeconds = nil
+                countdownTimer?.invalidate()
+                countdownTimer = nil
+            }
+        }
+
+        countdownTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+            DispatchQueue.main.async {
+                if let current = remainingSeconds, current > 0 {
+                    remainingSeconds = current - 1
+                } else {
+                    remainingSeconds = nil
+                    countdownTimer?.invalidate()
+                    countdownTimer = nil
+                }
+            }
+        }
+    }
+
+    func applyCustomMinutes() {
+        let totalMinutes = customHours * 60 + customMinutes
+        guard totalMinutes > 0 else { return }
+        selectedDuration = TimeInterval(totalMinutes * 60)
+        scheduleOffTimerIfNeeded()
     }
 
     // MARK: - Shell helpers
