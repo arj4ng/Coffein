@@ -51,6 +51,23 @@ func updateCoffeinStatusItem(isAwake: Bool) {
     }
 }
 
+// Shared number formatters for hours and minutes (used in custom timer UI)
+fileprivate let hoursFormatter: NumberFormatter = {
+    let f = NumberFormatter()
+    f.minimum = 0
+    f.maximum = 24
+    f.allowsFloats = false
+    return f
+}()
+
+fileprivate let minutesFormatter: NumberFormatter = {
+    let f = NumberFormatter()
+    f.minimum = 0
+    f.maximum = 59
+    f.allowsFloats = false
+    return f
+}()
+
 extension NSApplication {
     /// Called from the status item to bring Coffein to the front
     @objc func bringCoffeinToFront(_ sender: Any?) {
@@ -66,6 +83,7 @@ struct ContentView: View {
     enum TimerEndAction: String, CaseIterable, Identifiable {
         case deactivate
         case shutdown
+        case logout
 
         var id: String { rawValue }
 
@@ -73,6 +91,7 @@ struct ContentView: View {
             switch self {
             case .deactivate: return "Deactivate Coffein"
             case .shutdown:   return "Shut Down"
+            case .logout:     return "Log Out"
             }
         }
     }
@@ -93,411 +112,7 @@ struct ContentView: View {
 
     var body: some View {
         ZStack {
-            // Main card
-            VStack(spacing: 18) {
-
-                // Window controls inside the card
-                HStack(spacing: 8) {
-
-                    // Close
-                    Circle()
-                        .fill(hoverClose ? Color.red.opacity(1.0) : Color.red.opacity(0.75))
-                        .frame(width: 12, height: 12)
-                        .onHover { hoverClose = $0 }
-                        .animation(.easeInOut(duration: 0.15), value: hoverClose)
-                        .onTapGesture {
-                            if isAwake {
-                                // When Coffein is active, just minimize the window
-                                NSApp.keyWindow?.miniaturize(nil)
-                            } else {
-                                // When Coffein is idle, close the app completely
-                                NSApp.terminate(nil)
-                            }
-                        }
-
-                    // Minimize
-                    Circle()
-                        .fill(hoverMin ? Color.yellow.opacity(1.0) : Color.yellow.opacity(0.75))
-                        .frame(width: 12, height: 12)
-                        .onHover { hoverMin = $0 }
-                        .animation(.easeInOut(duration: 0.15), value: hoverMin)
-                        .onTapGesture { NSApp.keyWindow?.miniaturize(nil) }
-
-                    // Zoom
-                    Circle()
-                        .fill(hoverZoom ? Color.green.opacity(1.0) : Color.green.opacity(0.75))
-                        .frame(width: 12, height: 12)
-                        .onHover { hoverZoom = $0 }
-                        .animation(.easeInOut(duration: 0.15), value: hoverZoom)
-                        .onTapGesture { NSApp.keyWindow?.zoom(nil) }
-
-                    Spacer()
-                }
-                .padding(.bottom, 2)
-                .opacity(0.92)
-
-                // Header row
-                HStack {
-                    Image(systemName: isAwake ? "sun.max.fill" : "moon.zzz.fill")
-                        .symbolRenderingMode(.hierarchical)
-                        .font(.system(size: 22, weight: .medium))
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Coffein Shot")
-                            .font(.system(size: 18, weight: .semibold))
-                        Text("Stop your Mac from sleeping")
-                            .font(.system(size: 12, weight: .regular))
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Spacer()
-
-                    // Tiny status pill
-                    HStack(spacing: 6) {
-                        Circle()
-                            .fill(isAwake ? Color.green : Color.gray)
-                            .frame(width: 8, height: 8)
-                        Text(isAwake ? "Active" : "Idle")
-                            .font(.system(size: 12, weight: .medium))
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(
-                        Capsule()
-                            .fill(Color.white.opacity(0.08))
-                    )
-                }
-
-                // Power button
-                Button {
-                    isAwake.toggle()
-                    if isAwake {
-                        runCaffeinate()
-                    } else {
-                        stopCaffeinate()
-                    }
-                    scheduleOffTimerIfNeeded()
-                } label: {
-                    ZStack {
-                        // Soft pulsing ring when active
-                        Circle()
-                            .stroke(
-                                RadialGradient(
-                                    colors: isAwake
-                                        ? [Color.green.opacity(0.6), Color.green.opacity(0.0)]
-                                        : [Color.gray.opacity(0.4), Color.clear],
-                                    center: .center,
-                                    startRadius: 0,
-                                    endRadius: 60
-                                ),
-                                lineWidth: 2
-                            )
-                            .frame(width: 84, height: 84)
-                            .opacity(isAwake ? 1 : 0.5)
-                            .scaleEffect(isAwake ? 1.05 : 1.0)
-                            .animation(
-                                isAwake
-                                ? .easeInOut(duration: 1.2).repeatForever(autoreverses: true)
-                                : .default,
-                                value: isAwake
-                            )
-
-                        // Main circle
-                        Circle()
-                            .fill(
-                                LinearGradient(
-                                    colors: isAwake
-                                        ? [Color.green.opacity(0.55), Color.green.opacity(0.35)]
-                                        : [Color.gray.opacity(0.45), Color.gray.opacity(0.25)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                            .frame(width: 84, height: 84)
-                            .shadow(color: isAwake ? Color.green.opacity(0.7) : Color.black.opacity(0.6),
-                                    radius: isAwake ? 18 : 10,
-                                    x: 0, y: isAwake ? 10 : 6)
-                            .overlay(
-                                Circle()
-                                    .stroke(Color.white.opacity(0.35), lineWidth: 1)
-                            )
-
-                        // Icon
-                        Image(systemName: isAwake ? "power.circle.fill" : "power")
-                            .font(.system(size: 34, weight: .regular))
-                            .foregroundColor(.white)
-                    }
-                    .scaleEffect(isPressing ? 0.96 : 1.0)
-                }
-                .buttonStyle(.plain)
-                .pressEvents(onPress: { isPressing = true },
-                             onRelease: { isPressing = false })
-
-                // Countdown display (only when a timer is active)
-                if let text = countdownDisplayText {
-                    HStack {
-                        Spacer()
-                        Text(text)
-                            .font(.system(size: 16, weight: .medium, design: .monospaced))
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .fill(Color.black.opacity(0.35))
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .stroke(Color.white.opacity(0.25), lineWidth: 1)
-                            )
-                        Spacer()
-                    }
-                    .padding(.top, 4)
-                }
-
-                // Description
-                VStack(spacing: 4) {
-                    Text(isAwake ? "Your Mac won't sleep while this is on" : "Your Mac can sleep normally")
-                        .font(.system(size: 14, weight: .medium))
-                    Text("Powered by the built-in `caffeinate` command to keep your Mac from dozing off.")
-                        .font(.system(size: 13))
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 4)
-
-                // Auto-off timer (collapsible)
-                VStack(spacing: 6) {
-                    // Header row (collapsible toggle)
-                    Button {
-                        isTimerExpanded.toggle()
-                    } label: {
-                        HStack(spacing: 8) {
-                            Text("Auto turn off")
-                                .font(.system(size: 13, weight: .medium))
-                            Spacer()
-                            Text(selectedDuration == nil ? "Off" : timerSummaryText)
-                                .font(.system(size: 12))
-                                .foregroundStyle(.secondary)
-                            ZStack {
-                                Circle()
-                                    .fill(Color.white.opacity(0.10))
-                                Image(systemName: isTimerExpanded ? "chevron.up" : "chevron.down")
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .foregroundStyle(.secondary)
-                            }
-                            .frame(width: 20, height: 20)
-                        }
-                    }
-                    .buttonStyle(.plain)
-
-                    if isTimerExpanded {
-                        VStack(spacing: 8) {
-                            HStack(spacing: 10) {
-                                // Timer off circle button
-                                Button {
-                                    selectedDuration = nil
-                                    offTimer?.invalidate()
-                                    offTimer = nil
-                                    countdownTimer?.invalidate()
-                                    countdownTimer = nil
-                                    remainingSeconds = nil
-                                } label: {
-                                    Image(systemName: "stop.fill")
-                                        .font(.system(size: 16, weight: .semibold))
-                                        .foregroundColor(.primary)
-                                        .frame(width: 48, height: 48)
-                                        .background(
-                                            Circle()
-                                                .fill(selectedDuration == nil ? Color.white.opacity(0.22) : Color.white.opacity(0.08))
-                                        )
-                                }
-                                .buttonStyle(.plain)
-
-                                // 30 min preset
-                                Button {
-                                    selectedDuration = 30 * 60
-                                    scheduleOffTimerIfNeeded()
-                                } label: {
-                                    VStack(spacing: 2) {
-                                        Text("30")
-                                            .font(.system(size: 16, weight: .semibold))
-                                        Text("Min")
-                                            .font(.system(size: 10, weight: .medium))
-                                    }
-                                    .frame(width: 48, height: 48)
-                                    .background(
-                                        Circle()
-                                            .fill((selectedDuration == 30 * 60) ? Color.white.opacity(0.22) : Color.white.opacity(0.08))
-                                    )
-                                }
-                                .buttonStyle(.plain)
-
-                                // 1 h preset
-                                Button {
-                                    selectedDuration = 60 * 60
-                                    scheduleOffTimerIfNeeded()
-                                } label: {
-                                    VStack(spacing: 2) {
-                                        Text("1")
-                                            .font(.system(size: 16, weight: .semibold))
-                                        Text("Hr")
-                                            .font(.system(size: 10, weight: .medium))
-                                    }
-                                    .frame(width: 48, height: 48)
-                                    .background(
-                                        Circle()
-                                            .fill((selectedDuration == 60 * 60) ? Color.white.opacity(0.22) : Color.white.opacity(0.08))
-                                    )
-                                }
-                                .buttonStyle(.plain)
-
-                                // 2 h preset
-                                Button {
-                                    selectedDuration = 2 * 60 * 60
-                                    scheduleOffTimerIfNeeded()
-                                } label: {
-                                    VStack(spacing: 2) {
-                                        Text("2")
-                                            .font(.system(size: 16, weight: .semibold))
-                                        Text("Hr")
-                                            .font(.system(size: 10, weight: .medium))
-                                    }
-                                    .frame(width: 48, height: 48)
-                                    .background(
-                                        Circle()
-                                            .fill((selectedDuration == 2 * 60 * 60) ? Color.white.opacity(0.22) : Color.white.opacity(0.08))
-                                    )
-                                }
-                                .buttonStyle(.plain)
-
-                                // 3 h preset
-                                Button {
-                                    selectedDuration = 3 * 60 * 60
-                                    scheduleOffTimerIfNeeded()
-                                } label: {
-                                    VStack(spacing: 2) {
-                                        Text("3")
-                                            .font(.system(size: 16, weight: .semibold))
-                                        Text("Hr")
-                                            .font(.system(size: 10, weight: .medium))
-                                    }
-                                    .frame(width: 48, height: 48)
-                                    .background(
-                                        Circle()
-                                            .fill((selectedDuration == 3 * 60 * 60) ? Color.white.opacity(0.22) : Color.white.opacity(0.08))
-                                    )
-                                }
-                                .buttonStyle(.plain)
-                            }
-                            .padding(.top, 4)
-
-                            // Custom time below presets
-                            HStack(spacing: 10) {
-                                Text("Custom")
-                                    .font(.system(size: 11, weight: .medium))
-                                Spacer()
-                                HStack(spacing: 18) {
-                                    // Hours column
-                                    VStack(alignment: .leading, spacing: 3) {
-                                        Text("Hours")
-                                            .font(.system(size: 10, weight: .regular))
-                                            .foregroundStyle(.secondary)
-                                            .lineLimit(1)
-                                        Picker("Hours", selection: $customHours) {
-                                            ForEach(0...24, id: \.self) { h in
-                                                Text("\(h)")
-                                                    .tag(h)
-                                            }
-                                        }
-                                        .labelsHidden()
-                                        .frame(width: 50)
-                                    }
-
-                                    // Minutes column
-                                    VStack(alignment: .leading, spacing: 3) {
-                                        Text("Minutes")
-                                            .font(.system(size: 10, weight: .regular))
-                                            .foregroundStyle(.secondary)
-                                            .lineLimit(1)
-                                        Picker("Minutes", selection: $customMinutes) {
-                                            ForEach(0...59, id: \.self) { m in
-                                                Text("\(m)")
-                                                    .tag(m)
-                                            }
-                                        }
-                                        .labelsHidden()
-                                        .frame(width: 60)
-                                    }
-                                }
-                            }
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 10)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(
-                                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                    .fill(isCustomSelected ? Color.white.opacity(0.18) : Color.white.opacity(0.06))
-                            )
-                            .onChange(of: customHours) { _ in
-                                applyCustomMinutes()
-                            }
-                            .onChange(of: customMinutes) { _ in
-                                applyCustomMinutes()
-                            }
-
-                            // Action when timer ends – separate card under Custom
-                            VStack(spacing: 8) {
-                                HStack(spacing: 8) {
-                                    Text("When timer ends")
-                                        .font(.system(size: 11, weight: .medium))
-                                    Spacer()
-                                    Picker("When timer ends", selection: $timerEndAction) {
-                                        Text("Deactivate Coffein").tag(TimerEndAction.deactivate)
-                                        Text("Shut Down").tag(TimerEndAction.shutdown)
-                                    }
-                                    .labelsHidden()
-                                    .pickerStyle(.menu)  // dropdown style
-                                }
-                            }
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 10)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(
-                                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                    .fill(Color.white.opacity(0.06))
-                            )
-                            .font(.system(size: 11))
-
-                            // Timer summary text at the bottom
-                            Text(timerSummaryText)
-                                .font(.system(size: 11))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                .padding(.top, 6)
-
-                // Footer tag
-                Text("v1.0 · Made by arj4ng")
-                    .font(.system(size: 10, weight: .regular))
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 6)
-
-
-            }
-            .padding(.top, 24)
-            .padding(.horizontal, 24)
-            .padding(.bottom, 8)
-            .frame(width: 360)
-            .background(
-                .ultraThinMaterial,
-                in: RoundedRectangle(cornerRadius: 24, style: .continuous)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .stroke(Color.white.opacity(0.15), lineWidth: 1)
-            )
-            .shadow(color: Color.black.opacity(0.6), radius: 24, x: 0, y: 18)
+            mainCard
         }
         .onAppear {
             // Detect initial state (in case caffeinate is already running)
@@ -554,10 +169,445 @@ struct ContentView: View {
                 }
             }
         }
-        .onChange(of: isAwake) { newValue in
+        .onChange(of: isAwake) {
             // Status item is created once on appear; here we just update visibility & glyph
-            updateCoffeinStatusItem(isAwake: newValue)
+            updateCoffeinStatusItem(isAwake: isAwake)
         }
+    }
+
+    // Extracted main card to make body simpler for the compiler
+    @ViewBuilder
+    private var mainCard: some View {
+        // Main card
+        VStack(spacing: 18) {
+
+            // Window controls inside the card
+            HStack(spacing: 8) {
+
+                // Close
+                Circle()
+                    .fill(hoverClose ? Color.red.opacity(1.0) : Color.red.opacity(0.75))
+                    .frame(width: 12, height: 12)
+                    .onHover { hoverClose = $0 }
+                    .animation(.easeInOut(duration: 0.15), value: hoverClose)
+                    .onTapGesture {
+                        if isAwake {
+                            // When Coffein is active, just minimize the window
+                            NSApp.keyWindow?.miniaturize(nil)
+                        } else {
+                            // When Coffein is idle, close the app completely
+                            NSApp.terminate(nil)
+                        }
+                    }
+
+                // Minimize
+                Circle()
+                    .fill(hoverMin ? Color.yellow.opacity(1.0) : Color.yellow.opacity(0.75))
+                    .frame(width: 12, height: 12)
+                    .onHover { hoverMin = $0 }
+                    .animation(.easeInOut(duration: 0.15), value: hoverMin)
+                    .onTapGesture { NSApp.keyWindow?.miniaturize(nil) }
+
+                // Zoom
+                Circle()
+                    .fill(hoverZoom ? Color.green.opacity(1.0) : Color.green.opacity(0.75))
+                    .frame(width: 12, height: 12)
+                    .onHover { hoverZoom = $0 }
+                    .animation(.easeInOut(duration: 0.15), value: hoverZoom)
+                    .onTapGesture { NSApp.keyWindow?.zoom(nil) }
+
+                Spacer()
+            }
+            .padding(.bottom, 2)
+            .opacity(0.92)
+
+            // Header row
+            HStack {
+                Image(systemName: isAwake ? "sun.max.fill" : "moon.zzz.fill")
+                    .symbolRenderingMode(.hierarchical)
+                    .font(.system(size: 22, weight: .medium))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Coffein Shot")
+                        .font(.system(size: 18, weight: .semibold))
+                    Text("Stop your Mac from sleeping")
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                // Tiny status pill
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(isAwake ? Color.green : Color.gray)
+                        .frame(width: 8, height: 8)
+                    Text(isAwake ? "Active" : "Idle")
+                        .font(.system(size: 12, weight: .medium))
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(
+                    Capsule()
+                        .fill(Color.white.opacity(0.08))
+                )
+            }
+
+            // Power button
+            Button {
+                isAwake.toggle()
+                if isAwake {
+                    runCaffeinate()
+                } else {
+                    stopCaffeinate()
+                }
+                scheduleOffTimerIfNeeded()
+            } label: {
+                ZStack {
+                    // Soft pulsing ring when active
+                    Circle()
+                        .stroke(
+                            RadialGradient(
+                                colors: isAwake
+                                    ? [Color.green.opacity(0.6), Color.green.opacity(0.0)]
+                                    : [Color.gray.opacity(0.4), Color.clear],
+                                center: .center,
+                                startRadius: 0,
+                                endRadius: 60
+                            ),
+                            lineWidth: 2
+                        )
+                        .frame(width: 84, height: 84)
+                        .opacity(isAwake ? 1 : 0.5)
+                        .scaleEffect(isAwake ? 1.05 : 1.0)
+                        .animation(
+                            isAwake
+                            ? .easeInOut(duration: 1.2).repeatForever(autoreverses: true)
+                            : .default,
+                            value: isAwake
+                        )
+
+                    // Main circle
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: isAwake
+                                    ? [Color.green.opacity(0.55), Color.green.opacity(0.35)]
+                                    : [Color.gray.opacity(0.45), Color.gray.opacity(0.25)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 84, height: 84)
+                        .shadow(color: isAwake ? Color.green.opacity(0.7) : Color.black.opacity(0.6),
+                                radius: isAwake ? 18 : 10,
+                                x: 0, y: isAwake ? 10 : 6)
+                        .overlay(
+                            Circle()
+                                .stroke(Color.white.opacity(0.35), lineWidth: 1)
+                        )
+
+                    // Icon
+                    Image(systemName: isAwake ? "power.circle.fill" : "power")
+                        .font(.system(size: 34, weight: .regular))
+                        .foregroundColor(.white)
+                }
+                .scaleEffect(isPressing ? 0.96 : 1.0)
+            }
+            .buttonStyle(.plain)
+            .pressEvents(onPress: { isPressing = true },
+                         onRelease: { isPressing = false })
+
+            // Countdown display (only when a timer is active)
+            if let text = countdownDisplayText {
+                HStack {
+                    Spacer()
+                    Text(text)
+                        .font(.system(size: 16, weight: .medium, design: .monospaced))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(Color.black.opacity(0.35))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .stroke(Color.white.opacity(0.25), lineWidth: 1)
+                        )
+                    Spacer()
+                }
+                .padding(.top, 4)
+            }
+
+            // Description
+            VStack(spacing: 4) {
+                Text(isAwake ? "Your Mac won't sleep while this is on" : "Your Mac can sleep normally")
+                    .font(.system(size: 14, weight: .medium))
+                Text("Powered by the built-in `caffeinate` command to keep your Mac from dozing off.")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.top, 4)
+
+            // Auto-off timer (collapsible)
+            autoOffSection
+
+            // Footer tag
+            Text("v1.0 · Made by arj4ng")
+                .font(.system(size: 10, weight: .regular))
+                .foregroundStyle(.secondary)
+                .padding(.top, 6)
+        }
+        .padding(.top, 24)
+        .padding(.horizontal, 24)
+        .padding(.bottom, 8)
+        .frame(width: 360)
+        .background(
+            .ultraThinMaterial,
+            in: RoundedRectangle(cornerRadius: 24, style: .continuous)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(Color.white.opacity(0.15), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.6), radius: 24, x: 0, y: 18)
+    }
+
+    // Extracted auto-off section to keep mainCard smaller
+    @ViewBuilder
+    private var autoOffSection: some View {
+        VStack(spacing: 6) {
+            // Header row (collapsible toggle)
+            Button {
+                isTimerExpanded.toggle()
+            } label: {
+                HStack(spacing: 8) {
+                    Text("􀐱 Auto turn off")
+                        .font(.system(size: 14, weight: .medium))
+                    Spacer()
+                    Text(selectedDuration == nil ? "Off" : timerSummaryText)
+                        .font(.system(size: 14))
+                        .foregroundStyle(.secondary)
+                    ZStack {
+                        Circle()
+                            .fill(Color.white.opacity(0.10))
+                        Image(systemName: isTimerExpanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(width: 20, height: 20)
+                }
+            }
+            .buttonStyle(.plain)
+
+            if isTimerExpanded {
+                VStack(spacing: 8) {
+                    timerPresetsRow
+                    customTimerCard
+                    timerEndActionCard
+                    Text(timerSummaryText)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(.top, 6)
+    }
+
+    @ViewBuilder
+    private var timerPresetsRow: some View {
+        HStack(spacing: 10) {
+            // Timer off circle button
+            Button {
+                selectedDuration = nil
+                offTimer?.invalidate()
+                offTimer = nil
+                countdownTimer?.invalidate()
+                countdownTimer = nil
+                remainingSeconds = nil
+            } label: {
+                Image(systemName: "stop.fill")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.primary)
+                    .frame(width: 48, height: 48)
+                    .background(
+                        Circle()
+                            .fill(selectedDuration == nil ? Color.white.opacity(0.22) : Color.white.opacity(0.08))
+                    )
+            }
+            .buttonStyle(.plain)
+
+            // 30 min preset
+            Button {
+                selectedDuration = 30 * 60
+                scheduleOffTimerIfNeeded()
+            } label: {
+                VStack(spacing: 2) {
+                    Text("30")
+                        .font(.system(size: 16, weight: .semibold))
+                    Text("Min")
+                        .font(.system(size: 10, weight: .medium))
+                }
+                .frame(width: 48, height: 48)
+                .background(
+                    Circle()
+                        .fill((selectedDuration == 30 * 60) ? Color.white.opacity(0.22) : Color.white.opacity(0.08))
+                )
+            }
+            .buttonStyle(.plain)
+
+            // 1 h preset
+            Button {
+                selectedDuration = 60 * 60
+                scheduleOffTimerIfNeeded()
+            } label: {
+                VStack(spacing: 2) {
+                    Text("1")
+                        .font(.system(size: 16, weight: .semibold))
+                    Text("Hr")
+                        .font(.system(size: 10, weight: .medium))
+                }
+                .frame(width: 48, height: 48)
+                .background(
+                    Circle()
+                        .fill((selectedDuration == 60 * 60) ? Color.white.opacity(0.22) : Color.white.opacity(0.08))
+                )
+            }
+            .buttonStyle(.plain)
+
+            // 2 h preset
+            Button {
+                selectedDuration = 2 * 60 * 60
+                scheduleOffTimerIfNeeded()
+            } label: {
+                VStack(spacing: 2) {
+                    Text("2")
+                        .font(.system(size: 16, weight: .semibold))
+                    Text("Hr")
+                        .font(.system(size: 10, weight: .medium))
+                }
+                .frame(width: 48, height: 48)
+                .background(
+                    Circle()
+                        .fill((selectedDuration == 2 * 60 * 60) ? Color.white.opacity(0.22) : Color.white.opacity(0.08))
+                )
+            }
+            .buttonStyle(.plain)
+
+            // 3 h preset
+            Button {
+                selectedDuration = 3 * 60 * 60
+                scheduleOffTimerIfNeeded()
+            } label: {
+                VStack(spacing: 2) {
+                    Text("3")
+                        .font(.system(size: 16, weight: .semibold))
+                    Text("Hr")
+                        .font(.system(size: 10, weight: .medium))
+                }
+                .frame(width: 48, height: 48)
+                .background(
+                    Circle()
+                        .fill((selectedDuration == 3 * 60 * 60) ? Color.white.opacity(0.22) : Color.white.opacity(0.08))
+                )
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.top, 4)
+    }
+
+    @ViewBuilder
+    private var customTimerCard: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("Custom")
+                    .font(.system(size: 13, weight: .medium))
+
+                Spacer()
+
+                HStack(spacing: 12) {
+                    // Hours field + stepper
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Hours")
+                            .font(.system(size: 10, weight: .regular))
+                            .foregroundStyle(.secondary)
+
+                        Stepper(value: $customHours, in: 0...24) {
+                            TextField("0", value: $customHours, formatter: hoursFormatter)
+                                .font(.system(size: 12, weight: .medium, design: .monospaced))
+                                .multilineTextAlignment(.center)
+                                .frame(width: 32)
+                        }
+                    }
+
+                    // Minutes field + stepper
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Minutes")
+                            .font(.system(size: 10, weight: .regular))
+                            .foregroundStyle(.secondary)
+
+                        Stepper(value: $customMinutes, in: 0...59) {
+                            TextField("0", value: $customMinutes, formatter: minutesFormatter)
+                                .font(.system(size: 12, weight: .medium, design: .monospaced))
+                                .multilineTextAlignment(.center)
+                                .frame(width: 32)
+                        }
+                    }
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.white.opacity(0.10))
+                )
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(isCustomSelected ? Color.white.opacity(0.18) : Color.white.opacity(0.06))
+        )
+        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .onTapGesture {
+            // Re-apply the current custom duration as the active duration
+            applyCustomFromPicker()
+        }
+        .onChange(of: customHours) {
+            applyCustomFromPicker()
+        }
+        .onChange(of: customMinutes) {
+            applyCustomFromPicker()
+        }
+    }
+
+    @ViewBuilder
+    private var timerEndActionCard: some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 8) {
+                Text("When timer ends")
+                    .font(.system(size: 13, weight: .medium))
+                Spacer()
+                Picker("When timer ends", selection: $timerEndAction) {
+                    Text("Deactivate Coffein").tag(TimerEndAction.deactivate)
+                    Text("Shut Down").tag(TimerEndAction.shutdown)
+                    Text("Log Out").tag(TimerEndAction.logout)
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)  // dropdown style
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.white.opacity(0.06))
+        )
+        .font(.system(size: 11))
     }
 
     // MARK: - Timer helpers (UI)
@@ -599,6 +649,23 @@ struct ContentView: View {
 
     // MARK: - Timer helpers (logic)
 
+    // Helper to apply the custom duration (hours + minutes) and schedule the timer
+    func applyCustomFromPicker() {
+        // Clamp values to their allowed ranges in case of manual text entry
+        customHours = max(0, min(24, customHours))
+        customMinutes = max(0, min(59, customMinutes))
+
+        let totalMinutes = (customHours * 60) + customMinutes
+
+        if totalMinutes > 0 {
+            selectedDuration = TimeInterval(totalMinutes * 60)
+        } else {
+            selectedDuration = nil
+        }
+
+        scheduleOffTimerIfNeeded()
+    }
+
     func scheduleOffTimerIfNeeded() {
         offTimer?.invalidate()
         offTimer = nil
@@ -614,13 +681,19 @@ struct ContentView: View {
             DispatchQueue.main.async {
                 switch timerEndAction {
                 case .deactivate:
-                    // Current behavior: just turn Coffein off
+                    // Just turn Coffein off
                     isAwake = false
                     stopCaffeinate()
+
                 case .shutdown:
                     // Stop caffeinate first, then shut down the Mac
                     stopCaffeinate()
                     _ = shell("osascript -e 'tell application \"System Events\" to shut down'")
+
+                case .logout:
+                    // Stop caffeinate first, then log out the current user session
+                    stopCaffeinate()
+                    _ = shell("osascript -e 'tell application \"System Events\" to log out'")
                 }
 
                 remainingSeconds = nil
@@ -642,12 +715,6 @@ struct ContentView: View {
         }
     }
 
-    func applyCustomMinutes() {
-        let totalMinutes = customHours * 60 + customMinutes
-        guard totalMinutes > 0 else { return }
-        selectedDuration = TimeInterval(totalMinutes * 60)
-        scheduleOffTimerIfNeeded()
-    }
 
     // MARK: - Shell helpers
 
