@@ -73,9 +73,9 @@ struct ContentView: View {
                         .font(.system(size: 22, weight: .medium))
 
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Coffein")
+                        Text("Coffein Shot")
                             .font(.system(size: 18, weight: .semibold))
-                        Text("Control system sleep")
+                        Text("Stop your Mac from sleeping")
                             .font(.system(size: 12, weight: .regular))
                             .foregroundStyle(.secondary)
                     }
@@ -87,7 +87,7 @@ struct ContentView: View {
                         Circle()
                             .fill(isAwake ? Color.green : Color.gray)
                             .frame(width: 8, height: 8)
-                        Text(isAwake ? "Active" : "Idle")
+                        Text(isAwake ? "Stay awake" : "Can sleep")
                             .font(.system(size: 12, weight: .medium))
                     }
                     .padding(.horizontal, 10)
@@ -160,10 +160,10 @@ struct ContentView: View {
 
                 // Description
                 VStack(spacing: 4) {
-                    Text(isAwake ? "Sleep prevention enabled" : "Mac will follow normal sleep settings")
+                    Text(isAwake ? "Your Mac won't sleep while this is on" : "Your Mac can sleep normally")
                         .font(.system(size: 14, weight: .medium))
-                    Text("Uses the built-in caffeinate command. You can close this window at any time.")
-                        .font(.system(size: 11))
+                    Text("Powered by the built-in `caffeinate` command to keep your Mac from dozing off.")
+                        .font(.system(size: 13))
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                 }
