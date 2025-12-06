@@ -255,7 +255,9 @@ struct ContentView: View {
 
             // Power button
             Button {
-                isAwake.toggle()
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.8, blendDuration: 0.2)) {
+                    isAwake.toggle()
+                }
                 if isAwake {
                     runCaffeinate()
                 } else {
@@ -373,6 +375,7 @@ struct ContentView: View {
                 .stroke(Color.white.opacity(0.15), lineWidth: 1)
         )
         .shadow(color: Color.black.opacity(0.6), radius: 24, x: 0, y: 18)
+        .animation(.easeInOut(duration: 0.22), value: isAwake)
     }
 
     // Extracted auto-off section to keep mainCard smaller
@@ -407,9 +410,6 @@ struct ContentView: View {
                     timerPresetsRow
                     customTimerCard
                     timerEndActionCard
-                    Text(timerSummaryText)
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
                 }
             }
         }
@@ -681,9 +681,10 @@ struct ContentView: View {
             DispatchQueue.main.async {
                 switch timerEndAction {
                 case .deactivate:
-                    // Just turn Coffein off
+                    // Turn Coffein off and reset the timer to Off
                     isAwake = false
                     stopCaffeinate()
+                    selectedDuration = nil
 
                 case .shutdown:
                     // Stop caffeinate first, then shut down the Mac
