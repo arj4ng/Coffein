@@ -19,32 +19,60 @@
 // MARK: ║    ContentView.swift   ║
 // MARK: ╚════════════════════════╝
 
-
 import SwiftUI
+import AppKit
 
 struct ContentView: View {
     @State private var isAwake = false
     @State private var isPressing = false
-    
+    @State private var hoverClose = false
+    @State private var hoverMin = false
+    @State private var hoverZoom = false
+    @State private var dragStart: NSPoint? = nil
+
     var body: some View {
         ZStack {
-            // Subtle background for the whole window
-            LinearGradient(
-                colors: [Color.black.opacity(0.9), Color.black.opacity(0.7)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
-            
             // Main card
-            VStack(spacing: 22) {
-                
+            VStack(spacing: 18) {
+
+                // Window controls inside the card
+                HStack(spacing: 8) {
+
+                    // Close
+                    Circle()
+                        .fill(hoverClose ? Color.red.opacity(1.0) : Color.red.opacity(0.75))
+                        .frame(width: 12, height: 12)
+                        .onHover { hoverClose = $0 }
+                        .animation(.easeInOut(duration: 0.15), value: hoverClose)
+                        .onTapGesture { NSApp.keyWindow?.close() }
+
+                    // Minimize
+                    Circle()
+                        .fill(hoverMin ? Color.yellow.opacity(1.0) : Color.yellow.opacity(0.75))
+                        .frame(width: 12, height: 12)
+                        .onHover { hoverMin = $0 }
+                        .animation(.easeInOut(duration: 0.15), value: hoverMin)
+                        .onTapGesture { NSApp.keyWindow?.miniaturize(nil) }
+
+                    // Zoom
+                    Circle()
+                        .fill(hoverZoom ? Color.green.opacity(1.0) : Color.green.opacity(0.75))
+                        .frame(width: 12, height: 12)
+                        .onHover { hoverZoom = $0 }
+                        .animation(.easeInOut(duration: 0.15), value: hoverZoom)
+                        .onTapGesture { NSApp.keyWindow?.zoom(nil) }
+
+                    Spacer()
+                }
+                .padding(.bottom, 2)
+                .opacity(0.92)
+
                 // Header row
                 HStack {
                     Image(systemName: isAwake ? "sun.max.fill" : "moon.zzz.fill")
                         .symbolRenderingMode(.hierarchical)
                         .font(.system(size: 22, weight: .medium))
-                    
+
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Coffein")
                             .font(.system(size: 18, weight: .semibold))
@@ -52,9 +80,9 @@ struct ContentView: View {
                             .font(.system(size: 12, weight: .regular))
                             .foregroundStyle(.secondary)
                     }
-                    
+
                     Spacer()
-                    
+
                     // Tiny status pill
                     HStack(spacing: 6) {
                         Circle()
@@ -70,7 +98,7 @@ struct ContentView: View {
                             .fill(Color.white.opacity(0.08))
                     )
                 }
-                
+
                 // Power button
                 Button {
                     isAwake.toggle()
@@ -90,7 +118,7 @@ struct ContentView: View {
                                 ),
                                 lineWidth: 2
                             )
-                            .frame(width: 120, height: 120)
+                            .frame(width: 84, height: 84)
                             .opacity(isAwake ? 1 : 0.5)
                             .scaleEffect(isAwake ? 1.05 : 1.0)
                             .animation(
@@ -99,7 +127,7 @@ struct ContentView: View {
                                 : .default,
                                 value: isAwake
                             )
-                        
+
                         // Main circle
                         Circle()
                             .fill(
@@ -111,6 +139,7 @@ struct ContentView: View {
                                     endPoint: .bottomTrailing
                                 )
                             )
+                            .frame(width: 84, height: 84)
                             .shadow(color: isAwake ? Color.green.opacity(0.7) : Color.black.opacity(0.6),
                                     radius: isAwake ? 18 : 10,
                                     x: 0, y: isAwake ? 10 : 6)
@@ -118,17 +147,18 @@ struct ContentView: View {
                                 Circle()
                                     .stroke(Color.white.opacity(0.35), lineWidth: 1)
                             )
-                        
+
                         // Icon
                         Image(systemName: isAwake ? "power.circle.fill" : "power")
-                            .font(.system(size: 46, weight: .regular))
+                            .font(.system(size: 34, weight: .regular))
                             .foregroundColor(.white)
                     }
                     .scaleEffect(isPressing ? 0.96 : 1.0)
                 }
                 .buttonStyle(.plain)
-                .pressEvents(onPress: { isPressing = true }, onRelease: { isPressing = false })
-                
+                .pressEvents(onPress: { isPressing = true },
+                             onRelease: { isPressing = false })
+
                 // Description
                 VStack(spacing: 4) {
                     Text(isAwake ? "Sleep prevention enabled" : "Mac will follow normal sleep settings")
@@ -139,9 +169,11 @@ struct ContentView: View {
                         .multilineTextAlignment(.center)
                 }
                 .padding(.top, 4)
+
             }
-            .padding(24)
-            .frame(width: 360)
+            .padding(.horizontal, 24)
+            .padding(.vertical, 32)
+            .frame(width: 360, height: 260)
             .background(
                 .ultraThinMaterial,
                 in: RoundedRectangle(cornerRadius: 24, style: .continuous)
@@ -151,41 +183,81 @@ struct ContentView: View {
                     .stroke(Color.white.opacity(0.15), lineWidth: 1)
             )
             .shadow(color: Color.black.opacity(0.6), radius: 24, x: 0, y: 18)
-            .padding()
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 3)
+                    .onChanged { value in
+                        if let window = NSApplication.shared.windows.first {
+                            if dragStart == nil {
+                                dragStart = window.frame.origin
+                            }
+                            if let start = dragStart {
+                                var frame = window.frame
+                                frame.origin.x = start.x + value.translation.width
+                                frame.origin.y = start.y - value.translation.height
+                                window.setFrame(frame, display: true)
+                            }
+                        }
+                    }
+                    .onEnded { _ in
+                        dragStart = nil
+                    }
+            )
         }
         .onAppear {
-            // Optional: sync UI with current caffeinate state on launch
             isAwake = isCaffeinateRunning()
+
+            DispatchQueue.main.async {
+                if let window = NSApplication.shared.windows.first {
+                    window.titleVisibility = .hidden
+                    window.titlebarAppearsTransparent = true
+                    window.isOpaque = false
+                    window.backgroundColor = .clear
+                    window.hasShadow = false
+
+                    // Make the window borderless and non-resizable, content fills the whole frame
+                    window.styleMask = [.borderless, .fullSizeContentView]
+
+                    if let contentView = window.contentView {
+                        window.setContentSize(contentView.fittingSize)
+                    }
+
+                    // Hide native traffic lights (they may be nil for borderless, so this is safe)
+                    window.standardWindowButton(.closeButton)?.isHidden = true
+                    window.standardWindowButton(.miniaturizeButton)?.isHidden = true
+                    window.standardWindowButton(.zoomButton)?.isHidden = true
+                }
+            }
         }
     }
-    
-    // MARK: - Shell helpers (unchanged)
-    
+
+    // MARK: - Shell helpers
+
     func runCaffeinate() {
         _ = shell("nohup caffeinate -di >/dev/null 2>&1 &")
     }
-    
+
     func stopCaffeinate() {
         _ = shell("killall caffeinate")
     }
-    
+
     func isCaffeinateRunning() -> Bool {
         let result = shell("pgrep caffeinate")
         return result.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
     }
-    
+
     @discardableResult
     func shell(_ cmd: String) -> String {
         let task = Process()
         let pipe = Pipe()
-        
+
         task.standardOutput = pipe
         task.standardError = pipe
         task.arguments = ["-c", cmd]
         task.launchPath = "/bin/bash"
-        
+
         task.launch()
-        
+
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         return String(data: data, encoding: .utf8) ?? ""
     }
@@ -195,7 +267,7 @@ struct ContentView: View {
 private struct PressEventsModifier: ViewModifier {
     let onPress: () -> Void
     let onRelease: () -> Void
-    
+
     func body(content: Content) -> some View {
         content
             .simultaneousGesture(

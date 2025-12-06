@@ -8,11 +8,13 @@
 import SwiftUI
 
 @main
-struct PreventSleepApp: App {
+struct CoffeinApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
         }
-        .windowStyle(.titleBar)
+        .windowStyle(.hiddenTitleBar)          // hides toolbar
+        .windowToolbarStyle(.unifiedCompact)   // prevents automatic chrome
+        .windowResizability(.automatic)
     }
 }
