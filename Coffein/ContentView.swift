@@ -87,7 +87,7 @@ struct ContentView: View {
                         Circle()
                             .fill(isAwake ? Color.green : Color.gray)
                             .frame(width: 8, height: 8)
-                        Text(isAwake ? "Stay awake" : "Can sleep")
+                        Text(isAwake ? "Active" : "Idle")
                             .font(.system(size: 12, weight: .medium))
                     }
                     .padding(.horizontal, 10)
@@ -170,8 +170,16 @@ struct ContentView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 4)
 
+                // Footer tag
+                Text("v1.0 · arj4ng")
+                    .font(.system(size: 10, weight: .regular))
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 6)
+
             }
-            .padding(24)
+            .padding(.top, 24)
+            .padding(.horizontal, 24)
+            .padding(.bottom, 8)
             .frame(width: 360)
             .background(
                 .ultraThinMaterial,
