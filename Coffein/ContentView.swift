@@ -393,13 +393,13 @@ struct ContentView: View {
                             .padding(.top, 4)
 
                             // Custom time below presets
-                            HStack(spacing: 6) {
+                            HStack(spacing: 10) {
                                 Text("Custom")
                                     .font(.system(size: 11, weight: .medium))
                                 Spacer()
-                                HStack(spacing: 16) {
+                                HStack(spacing: 18) {
                                     // Hours column
-                                    VStack(alignment: .leading, spacing: 2) {
+                                    VStack(alignment: .leading, spacing: 3) {
                                         Text("Hours")
                                             .font(.system(size: 10, weight: .regular))
                                             .foregroundStyle(.secondary)
@@ -415,7 +415,7 @@ struct ContentView: View {
                                     }
 
                                     // Minutes column
-                                    VStack(alignment: .leading, spacing: 2) {
+                                    VStack(alignment: .leading, spacing: 3) {
                                         Text("Minutes")
                                             .font(.system(size: 10, weight: .regular))
                                             .foregroundStyle(.secondary)
@@ -431,8 +431,8 @@ struct ContentView: View {
                                     }
                                 }
                             }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .background(
                                 RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -446,8 +446,8 @@ struct ContentView: View {
                             }
 
                             // Action when timer ends – separate card under Custom
-                            VStack(spacing: 6) {
-                                HStack(spacing: 4) {
+                            VStack(spacing: 8) {
+                                HStack(spacing: 8) {
                                     Text("When timer ends")
                                         .font(.system(size: 11, weight: .medium))
                                     Spacer()
@@ -459,8 +459,8 @@ struct ContentView: View {
                                     .pickerStyle(.menu)  // dropdown style
                                 }
                             }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .background(
                                 RoundedRectangle(cornerRadius: 14, style: .continuous)
