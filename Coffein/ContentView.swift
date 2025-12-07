@@ -85,23 +85,17 @@ func updateCoffeinStatusItem(isAwake: Bool, tooltip: String? = nil) {
     let defaultText = isAwake ? "Coffein: Active – your Mac won't sleep" : "Coffein – idle (Mac can sleep normally)"
     let tip = tooltip ?? defaultText
 
-    if isAwake {
-        let glyph = "􁉘"
-        let font = NSFont.systemFont(ofSize: 15)
-        let attributed = NSAttributedString(string: glyph, attributes: [ .font: font ])
+    // Always show an icon; switch glyph based on state
+    let symbol = isAwake ? "􀋦" : "􀋩"  // enabled / disabled icons
+    let font = NSFont.systemFont(ofSize: 15)
+    let attributed = NSAttributedString(string: symbol, attributes: [ .font: font ])
 
-        button.image = nil
-        button.title = ""
-        button.attributedTitle = attributed
-    } else {
-        button.image = nil
-        button.title = ""
-        button.attributedTitle = NSAttributedString(string: "")
-    }
-
+    button.image = nil
+    button.title = ""
+    button.attributedTitle = attributed
     button.toolTip = tip
 
-    // If the status item has a menu, keep the first item in sync with the tooltip
+    // Keep the first menu item (state line) in sync with the tooltip text
     if let menu = coffeinStatusItem?.menu, let first = menu.items.first {
         first.title = tip
     }
@@ -199,7 +193,7 @@ struct ContentView: View {
         }
     }
     @Environment(\.colorScheme) private var colorScheme
-    @State private var isAwake = false
+    @State private var isAwake = true
     @State private var isPressing = false
     @State private var hoverClose = false
     @State private var hoverMin = false
@@ -231,8 +225,14 @@ struct ContentView: View {
             mainCard
         }
         .onAppear {
-            // Detect initial state (in case caffeinate is already running)
-            isAwake = isCaffeinateRunning()
+            // On launch, always start in active state and ensure caffeinate is running
+            if isCaffeinateRunning() {
+                // If we somehow already have a tracked caffeinate process, reflect that
+                isAwake = true
+            } else {
+                isAwake = true
+                runCaffeinate()
+            }
             coffeinIsAwakeFlag = isAwake
 
             // Always create the status item once; visibility is controlled by updateCoffeinStatusItem

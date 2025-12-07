@@ -86,6 +86,42 @@ class CoffeinAppDelegate: NSObject, NSApplicationDelegate {
         window.makeKeyAndOrderFront(nil)
     }
 
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        let mainMenu = NSMenu()
+
+        // Top-level Coffein app menu
+        let appMenuItem = NSMenuItem()
+        mainMenu.addItem(appMenuItem)
+
+        let appMenu = NSMenu(title: "Coffein")
+        appMenuItem.submenu = appMenu
+
+        let appName = ProcessInfo.processInfo.processName
+
+        // About item – opens custom About panel
+        let aboutItem = NSMenuItem(
+            title: "About \(appName)",
+            action: #selector(showAboutPanel(_:)),
+            keyEquivalent: ""
+        )
+        aboutItem.target = self
+        appMenu.addItem(aboutItem)
+
+        appMenu.addItem(NSMenuItem.separator())
+
+        // Quit item – still goes through applicationShouldTerminate(_:) first
+        let quitItem = NSMenuItem(
+            title: "Quit \(appName)",
+            action: #selector(NSApplication.terminate(_:)),
+            keyEquivalent: "q"
+        )
+        quitItem.target = NSApp
+        appMenu.addItem(quitItem)
+
+        // Install as the app's main menu, replacing the default SwiftUI menus
+        NSApp.mainMenu = mainMenu
+    }
+
 }
 
 @main
@@ -96,29 +132,9 @@ struct CoffeinApp: App {
         WindowGroup {
             ContentView()
         }
-        .windowStyle(.hiddenTitleBar)          // hides toolbar
-        .windowToolbarStyle(.unifiedCompact)   // prevents automatic chrome
+        .windowStyle(.hiddenTitleBar)
+        .windowToolbarStyle(.unifiedCompact)
         .windowResizability(.contentSize)
-        .commands {
-            // Replace the default “About” item with your custom About window
-            CommandGroup(replacing: .appInfo) {
-                Button("About Coffein") {
-                    appDelegate.showAboutPanel(nil)
-                }
-            }
-
-            // Replace the default Quit menu.
-            // This still goes through applicationShouldTerminate(_:) in your delegate.
-            CommandGroup(replacing: .appTermination) {
-                Button("Quit Coffein") {
-                    NSApp.terminate(nil)
-                }
-                .keyboardShortcut("q")
-            }
-
-            // Optional: remove “New Window”, “New Document” etc. since your app has none.
-            CommandGroup(replacing: .newItem) { }
-        }
     }
 }
 
@@ -195,7 +211,7 @@ private struct AboutView: View {
                     .padding(.top, 2)
 
                 VStack(spacing: 2) {
-                    Text("Created by Arjang Khademi (arj4ng)")
+                    Text("Made by arj4ng")
                         .font(.system(size: 12, weight: .medium))
 
                     Text("A new macOS app developer building tiny tools for real‑world workflows.")
