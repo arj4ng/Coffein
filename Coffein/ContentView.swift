@@ -776,46 +776,91 @@ private struct LiquidGradientCircle: View {
     /// 0 = no timer / just started, 1 = timer nearly done
     let timerIntensity: Double
 
-    @State private var animate: Bool = false
+    @State private var spin1: Double = 0
+    @State private var spin2: Double = 0
+    @State private var spin3: Double = 0
 
     var body: some View {
-        // Base hue for "calm" green and a slightly warmer hue for urgency
+        // timerIntensity: 0 = just started, 1 = almost finished
+        // We want the "fill level" to DECREASE over time visually,
+        // so fillLevel is the fraction of time remaining (1 → 0).
+        let clampedIntensity = max(0.0, min(1.0, timerIntensity))
+        let fillLevel = 1.0 - clampedIntensity   // 1 at start, 0 near end
+
+        // Base hue for a calm green
         let baseHue: Double = 0.33   // green-ish
-        let warmHue: Double = 0.18   // warmer yellow-green
-        let hue = baseHue - (baseHue - warmHue) * timerIntensity
-
         let saturation: Double = 0.92
-        let innerBrightness: Double = 0.86 + 0.10 * timerIntensity
-        let outerBrightness: Double = 0.62 + 0.06 * timerIntensity
 
-        let inner = Color(hue: hue, saturation: saturation, brightness: innerBrightness)
-        let outer = Color(hue: hue, saturation: saturation, brightness: outerBrightness)
+        let color1 = Color(hue: baseHue, saturation: saturation, brightness: 0.88)
+        let color2 = Color(hue: baseHue, saturation: saturation, brightness: 0.74)
+        let color3 = Color(hue: baseHue, saturation: saturation, brightness: 0.62)
 
-        Circle()
-            .fill(
-                AngularGradient(
-                    gradient: Gradient(colors: [
-                        inner,
-                        outer,
-                        inner.opacity(0.95),
-                        outer.opacity(0.85),
-                        inner
-                    ]),
-                    center: .center
-                )
-            )
-            .rotationEffect(.degrees(animate ? 360 : 0))
-            .scaleEffect(1.0 + 0.03 * timerIntensity)
-            .opacity(1.0)
-            // Slow continuous spin for a liquid feel
-            .animation(.linear(duration: 16.0).repeatForever(autoreverses: false), value: animate)
-            // Smoothly react to timer urgency changes
-            .animation(.easeInOut(duration: 0.3), value: timerIntensity)
-            .onAppear {
-                animate = true
+        // A darker "empty container" behind the liquid
+        let container = Color(hue: baseHue, saturation: 0.40, brightness: 0.18)
+
+        return ZStack {
+            // Container background (what's left when the liquid is drained)
+            Circle()
+                .fill(container)
+
+            if fillLevel > 0.001 {
+                ZStack {
+                    // Three overlapping rotating blobs like the CSS waves,
+                    // slightly smaller so they stay comfortably inside the circle
+                    Circle()
+                        .fill(color1.opacity(0.8))
+                        .frame(width: 120, height: 120)
+                        .offset(x: -14, y: 16)
+                        .rotationEffect(.degrees(spin1))
+
+                    Circle()
+                        .fill(color2.opacity(0.6))
+                        .frame(width: 130, height: 130)
+                        .offset(x: 10, y: 20)
+                        .rotationEffect(.degrees(spin2))
+
+                    Circle()
+                        .fill(color3.opacity(0.5))
+                        .frame(width: 140, height: 140)
+                        .offset(x: -6, y: 24)
+                        .rotationEffect(.degrees(spin3))
+                }
+                // Blend blobs together so they feel like one liquid mass
+                .compositingGroup()
+                .blur(radius: 2.0)
+                // Slightly shrink the whole stack,
+                .scaleEffect(0.9, anchor: .bottom)
+                // then drain vertically from bottom as time passes (never thinner than 15%)
+                .scaleEffect(x: 1.0, y: max(0.15, fillLevel), anchor: .bottom)
+                // Lift the liquid a bit so low levels are easier to see
+                .offset(y: -8)
             }
+        }
+        // Constrain to the button's size and clip to a circle to hide overflow
+        .frame(width: 84, height: 84, alignment: .center)
+        .clipShape(Circle())
+        .opacity(0.95)
+        // Smoothly react as the timer counts down
+        .animation(.easeInOut(duration: 0.35), value: timerIntensity)
+        .onAppear {
+            // Slow but distinct rotations for each layer (like different wave durations)
+            spin1 = 0
+            spin2 = 0
+            spin3 = 0
+
+            withAnimation(.linear(duration: 5.0).repeatForever(autoreverses: false)) {
+                spin1 = 360
+            }
+            withAnimation(.linear(duration: 7.0).repeatForever(autoreverses: false)) {
+                spin2 = 360
+            }
+            withAnimation(.linear(duration: 11.0).repeatForever(autoreverses: false)) {
+                spin3 = 360
+            }
+        }
     }
 }
+
 
 // Small helper to detect button press state
 private struct PressEventsModifier: ViewModifier {
