@@ -26,7 +26,8 @@ import IOKit.pwr_mgt
 
 
 extension Notification.Name {
-    static let coffeinForceStop = Notification.Name("coffeinForceStop")
+    static let coffeinForceStop        = Notification.Name("coffeinForceStop")
+    static let coffeinQuickTimerPreset = Notification.Name("coffeinQuickTimerPreset")
 }
 
 // Global menu bar status item for Coffein
@@ -35,28 +36,74 @@ var coffeinStatusItem: NSStatusItem?
 // Global flag so the app delegate knows if Coffein is actively preventing sleep
 var coffeinIsAwakeFlag: Bool = false
 
+// Helper object to handle status item menu actions
+class CoffeinStatusMenuHandler: NSObject {
+    @objc func openMain(_ sender: Any?) {
+        NSApp.bringCoffeinToFront(sender)
+    }
+
+    @objc func quickTimerOff(_ sender: Any?) {
+        NotificationCenter.default.post(name: .coffeinQuickTimerPreset, object: 0 as TimeInterval)
+    }
+
+    @objc func quickTimer30(_ sender: Any?) {
+        NotificationCenter.default.post(name: .coffeinQuickTimerPreset, object: 30 * 60 as TimeInterval)
+    }
+
+    @objc func quickTimer60(_ sender: Any?) {
+        NotificationCenter.default.post(name: .coffeinQuickTimerPreset, object: 60 * 60 as TimeInterval)
+    }
+
+    @objc func quickTimer120(_ sender: Any?) {
+        NotificationCenter.default.post(name: .coffeinQuickTimerPreset, object: 2 * 60 * 60 as TimeInterval)
+    }
+
+    @objc func quickTimer180(_ sender: Any?) {
+        NotificationCenter.default.post(name: .coffeinQuickTimerPreset, object: 3 * 60 * 60 as TimeInterval)
+    }
+
+    @objc func openAbout(_ sender: Any?) {
+        // Forward to the app delegate's custom About panel
+        NSApp.sendAction(#selector(CoffeinAppDelegate.showAboutPanel(_:)), to: nil, from: sender)
+    }
+
+    @objc func quitApp(_ sender: Any?) {
+        NSApp.terminate(sender)
+    }
+}
+
+// Single shared handler for all status item menu actions
+let coffeinStatusMenuHandler = CoffeinStatusMenuHandler()
+
 /// Updates the menu bar icon & tooltip based on Coffein state
-func updateCoffeinStatusItem(isAwake: Bool) {
+/// - Parameters:
+///   - isAwake: Whether Coffein is currently preventing sleep
+///   - tooltip: Optional custom tooltip text. If nil, a default message is used.
+func updateCoffeinStatusItem(isAwake: Bool, tooltip: String? = nil) {
     guard let button = coffeinStatusItem?.button else { return }
 
+    let defaultText = isAwake ? "Coffein: Active – your Mac won't sleep" : "Coffein – idle (Mac can sleep normally)"
+    let tip = tooltip ?? defaultText
+
     if isAwake {
-        // Active glyph only: 􁉘
         let glyph = "􁉘"
         let font = NSFont.systemFont(ofSize: 15)
-        let attributed = NSAttributedString(string: glyph, attributes: [
-            .font: font
-        ])
+        let attributed = NSAttributedString(string: glyph, attributes: [ .font: font ])
 
         button.image = nil
         button.title = ""
         button.attributedTitle = attributed
-        button.toolTip = "Coffein: Active – your Mac won't sleep"
     } else {
-        // Clear the glyph when off (leaves a tiny gap, but status item stays stable)
         button.image = nil
         button.title = ""
         button.attributedTitle = NSAttributedString(string: "")
-        button.toolTip = "Coffein"
+    }
+
+    button.toolTip = tip
+
+    // If the status item has a menu, keep the first item in sync with the tooltip
+    if let menu = coffeinStatusItem?.menu, let first = menu.items.first {
+        first.title = tip
     }
 }
 
@@ -165,7 +212,19 @@ struct ContentView: View {
     @State private var countdownTimer: Timer? = nil
     @State private var remainingSeconds: Int? = nil
     @State private var isTimerExpanded: Bool = false
-    @State private var timerEndAction: TimerEndAction = .deactivate
+
+    // Persist small preferences between launches
+    @AppStorage("coffein_timerEndActionRaw") private var timerEndActionRaw: String = TimerEndAction.deactivate.rawValue
+    @AppStorage("coffein_selectedMinutes")   private var storedSelectedMinutes: Int = 0
+    @AppStorage("coffein_customHours")       private var storedCustomHours: Int = 0
+    @AppStorage("coffein_customMinutes")     private var storedCustomMinutes: Int = 0
+    @AppStorage("coffein_isTimerExpanded")   private var storedIsTimerExpanded: Bool = false
+
+    // Convenience wrapper so UI works with the enum instead of raw strings
+    private var timerEndAction: TimerEndAction {
+        get { TimerEndAction(rawValue: timerEndActionRaw) ?? .deactivate }
+        set { timerEndActionRaw = newValue.rawValue }
+    }
 
     var body: some View {
         ZStack {
@@ -184,15 +243,63 @@ struct ContentView: View {
                     button.image = nil
                     button.title = ""
                     button.toolTip = "Coffein"
-                    button.target = NSApp
-                    button.action = #selector(NSApplication.bringCoffeinToFront(_:))
+                    // Main click just shows the menu; no explicit action needed here
                 }
 
+                // Build dropdown menu for the status item
+                let menu = NSMenu()
+
+                // First line: current state/tooltip (disabled)
+                let stateItem = NSMenuItem(title: statusTooltip, action: nil, keyEquivalent: "")
+                stateItem.isEnabled = false
+                menu.addItem(stateItem)
+                menu.addItem(NSMenuItem.separator())
+
+                // Open main UI
+                let openItem = NSMenuItem(title: "Open Coffein", action: #selector(CoffeinStatusMenuHandler.openMain(_:)), keyEquivalent: "")
+                openItem.target = coffeinStatusMenuHandler
+                menu.addItem(openItem)
+
+                menu.addItem(NSMenuItem.separator())
+
+                // Quick timer presets from the menu
+                let offItem = NSMenuItem(title: "Timer Off", action: #selector(CoffeinStatusMenuHandler.quickTimerOff(_:)), keyEquivalent: "")
+                offItem.target = coffeinStatusMenuHandler
+                menu.addItem(offItem)
+
+                let t30 = NSMenuItem(title: "30 min", action: #selector(CoffeinStatusMenuHandler.quickTimer30(_:)), keyEquivalent: "")
+                t30.target = coffeinStatusMenuHandler
+                menu.addItem(t30)
+
+                let t60 = NSMenuItem(title: "1 hour", action: #selector(CoffeinStatusMenuHandler.quickTimer60(_:)), keyEquivalent: "")
+                t60.target = coffeinStatusMenuHandler
+                menu.addItem(t60)
+
+                let t120 = NSMenuItem(title: "2 hours", action: #selector(CoffeinStatusMenuHandler.quickTimer120(_:)), keyEquivalent: "")
+                t120.target = coffeinStatusMenuHandler
+                menu.addItem(t120)
+
+                let t180 = NSMenuItem(title: "3 hours", action: #selector(CoffeinStatusMenuHandler.quickTimer180(_:)), keyEquivalent: "")
+                t180.target = coffeinStatusMenuHandler
+                menu.addItem(t180)
+
+                menu.addItem(NSMenuItem.separator())
+
+                // About + Quit
+                let aboutItem = NSMenuItem(title: "About Coffein", action: #selector(CoffeinStatusMenuHandler.openAbout(_:)), keyEquivalent: "")
+                aboutItem.target = coffeinStatusMenuHandler
+                menu.addItem(aboutItem)
+
+                let quitItem = NSMenuItem(title: "Quit Coffein", action: #selector(CoffeinStatusMenuHandler.quitApp(_:)), keyEquivalent: "q")
+                quitItem.target = coffeinStatusMenuHandler
+                menu.addItem(quitItem)
+
+                item.menu = menu
                 coffeinStatusItem = item
             }
 
             // Sync current state to the status item (will hide it if not awake)
-            updateCoffeinStatusItem(isAwake: isAwake)
+            updateCoffeinStatusItem(isAwake: isAwake, tooltip: statusTooltip)
 
             DispatchQueue.main.async {
                 if let window = NSApplication.shared.windows.first {
@@ -224,11 +331,58 @@ struct ContentView: View {
                     window.standardWindowButton(.zoomButton)?.isHidden = true
                 }
             }
+
+            // Restore simple preferences from storage
+            customHours = storedCustomHours
+            customMinutes = storedCustomMinutes
+            isTimerExpanded = storedIsTimerExpanded
+
+            if storedSelectedMinutes > 0 {
+                selectedDuration = TimeInterval(storedSelectedMinutes * 60)
+            } else {
+                selectedDuration = nil
+            }
         }
         .onChange(of: isAwake) {
             // Keep global flag and status item in sync
             coffeinIsAwakeFlag = isAwake
-            updateCoffeinStatusItem(isAwake: isAwake)
+            updateCoffeinStatusItem(isAwake: isAwake, tooltip: statusTooltip)
+        }
+        .onChange(of: selectedDuration) {
+            if let duration = selectedDuration {
+                storedSelectedMinutes = Int(duration / 60)
+            } else {
+                storedSelectedMinutes = 0
+            }
+            updateCoffeinStatusItem(isAwake: isAwake, tooltip: statusTooltip)
+        }
+        .onChange(of: isTimerExpanded) {
+            storedIsTimerExpanded = isTimerExpanded
+        }
+        .onChange(of: remainingSeconds, initial: false) {
+            updateCoffeinStatusItem(isAwake: isAwake, tooltip: statusTooltip)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .coffeinQuickTimerPreset)) { note in
+            guard let seconds = note.object as? TimeInterval else { return }
+
+            // Clear existing timers
+            offTimer?.invalidate()
+            offTimer = nil
+            countdownTimer?.invalidate()
+            countdownTimer = nil
+            remainingSeconds = nil
+
+            if seconds <= 0 {
+                // Timer Off via menu
+                selectedDuration = nil
+            } else {
+                selectedDuration = seconds
+                if !isAwake {
+                    isAwake = true
+                    runCaffeinate()
+                }
+                scheduleOffTimerIfNeeded()
+            }
         }
     }
 
@@ -684,7 +838,16 @@ struct ContentView: View {
                     .font(.system(size: 13, weight: .medium))
                     .foregroundColor(colorScheme == .dark ? .primary : .primary)
                 Spacer()
-                Picker("When timer ends", selection: $timerEndAction) {
+                Picker(
+                    "When timer ends",
+                    selection: Binding<TimerEndAction>(
+                        get: { timerEndAction },
+                        set: { newValue in
+                            // write directly to the AppStorage-backed raw value
+                            timerEndActionRaw = newValue.rawValue
+                        }
+                    )
+                ) {
                     Text("Deactivate Coffein").tag(TimerEndAction.deactivate)
                     Text("Sleep").tag(TimerEndAction.sleep)
                 }
@@ -703,6 +866,33 @@ struct ContentView: View {
     }
 
     // MARK: - Timer helpers (UI)
+
+    /// Tooltip for the menu bar icon, reflecting current state and timer
+    private var statusTooltip: String {
+        if !isAwake {
+            return "Coffein – idle (Mac can sleep normally)"
+        }
+
+        // If we have a live countdown, show remaining time
+        if let secs = remainingSeconds, secs > 0 {
+            let hours = secs / 3600
+            let minutes = (secs % 3600) / 60
+
+            if hours > 0 {
+                return String(format: "Coffein: Active – Sleep in %dh %02dm", hours, minutes)
+            } else {
+                return String(format: "Coffein: Active – Sleep in %d min", minutes)
+            }
+        }
+
+        // If we only know the selected duration, use the summary text
+        if let _ = selectedDuration {
+            return "Coffein: Active – \(timerSummaryText)"
+        }
+
+        // Fallback
+        return "Coffein: Active – your Mac won't sleep"
+    }
 
     private var countdownDisplayText: String? {
         guard isAwake, let seconds = remainingSeconds, seconds > 0 else { return nil }
@@ -762,6 +952,10 @@ struct ContentView: View {
         // Clamp values to their allowed ranges in case of manual text entry
         customHours = max(0, min(24, customHours))
         customMinutes = max(0, min(59, customMinutes))
+
+        // Persist custom values
+        storedCustomHours = customHours
+        storedCustomMinutes = customMinutes
 
         let totalMinutes = (customHours * 60) + customMinutes
 
