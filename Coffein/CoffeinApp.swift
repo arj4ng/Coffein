@@ -35,7 +35,7 @@ class CoffeinAppDelegate: NSObject, NSApplicationDelegate {
         return .terminateNow
     }
 
-    @objc private func showAboutPanel(_ sender: Any?) {
+    @objc func showAboutPanel(_ sender: Any?) {
         if let window = aboutWindow {
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
@@ -57,7 +57,6 @@ class CoffeinAppDelegate: NSObject, NSApplicationDelegate {
         window.contentViewController = hostingController
 
         // Ask the SwiftUI view for its ideal (fitting) size, then resize the window to hug it.
-        hostingController.view.layoutSubtreeIfNeeded()
         let fittingSize = hostingController.view.fittingSize
 
         // Add a little extra breathing room so it doesn't feel cramped at the edges.
@@ -73,37 +72,6 @@ class CoffeinAppDelegate: NSObject, NSApplicationDelegate {
         window.makeKeyAndOrderFront(nil)
     }
 
-    func applicationDidFinishLaunching(_ notification: Notification) {
-        let mainMenu = NSMenu()
-
-        // Top-level "Coffein" app menu
-        let appMenuItem = NSMenuItem()
-        mainMenu.addItem(appMenuItem)
-
-        let appMenu = NSMenu()
-        appMenuItem.submenu = appMenu
-
-        let appName = ProcessInfo.processInfo.processName
-
-        // About item – opens a custom About panel with info about the developer and app
-        appMenu.addItem(
-            withTitle: "About \(appName)",
-            action: #selector(showAboutPanel(_:)),
-            keyEquivalent: ""
-        )
-
-        appMenu.addItem(NSMenuItem.separator())
-
-        // Quit item
-        appMenu.addItem(
-            withTitle: "Quit \(appName)",
-            action: #selector(NSApplication.terminate(_:)),
-            keyEquivalent: "q"
-        )
-
-        // Install this as the only main menu
-        NSApp.mainMenu = mainMenu
-    }
 }
 
 @main
@@ -117,6 +85,26 @@ struct CoffeinApp: App {
         .windowStyle(.hiddenTitleBar)          // hides toolbar
         .windowToolbarStyle(.unifiedCompact)   // prevents automatic chrome
         .windowResizability(.contentSize)
+        .commands {
+            // Replace the default “About” item with your custom About window
+            CommandGroup(replacing: .appInfo) {
+                Button("About Coffein") {
+                    appDelegate.showAboutPanel(nil)
+                }
+            }
+
+            // Replace the default Quit menu.
+            // This still goes through applicationShouldTerminate(_:) in your delegate.
+            CommandGroup(replacing: .appTermination) {
+                Button("Quit Coffein") {
+                    NSApp.terminate(nil)
+                }
+                .keyboardShortcut("q")
+            }
+
+            // Optional: remove “New Window”, “New Document” etc. since your app has none.
+            CommandGroup(replacing: .newItem) { }
+        }
     }
 }
 

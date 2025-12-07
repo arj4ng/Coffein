@@ -22,6 +22,7 @@
 
 import SwiftUI
 import AppKit
+import IOKit.pwr_mgt
 
 // Global menu bar status item for Coffein
 var coffeinStatusItem: NSStatusItem?
@@ -85,16 +86,14 @@ extension NSApplication {
 struct ContentView: View {
     enum TimerEndAction: String, CaseIterable, Identifiable {
         case deactivate
-        case shutdown
-        case logout
+        case sleep
 
         var id: String { rawValue }
 
         var label: String {
             switch self {
             case .deactivate: return "Deactivate Coffein"
-            case .shutdown:   return "Shut Down"
-            case .logout:     return "Log Out"
+            case .sleep:      return "Sleep"
             }
         }
     }
@@ -160,8 +159,6 @@ struct ContentView: View {
                     window.isMovableByWindowBackground = true
 
                     if let contentView = window.contentView {
-                        // Make sure layout is up-to-date before measuring
-                        contentView.layoutSubtreeIfNeeded()
                         let size = contentView.fittingSize
                         window.setContentSize(size)
                         window.minSize = size
@@ -635,8 +632,7 @@ struct ContentView: View {
                 Spacer()
                 Picker("When timer ends", selection: $timerEndAction) {
                     Text("Deactivate Coffein").tag(TimerEndAction.deactivate)
-                    Text("Shut Down").tag(TimerEndAction.shutdown)
-                    Text("Log Out").tag(TimerEndAction.logout)
+                    Text("Sleep").tag(TimerEndAction.sleep)
                 }
                 .labelsHidden()
                 .pickerStyle(.menu)  // dropdown style
@@ -744,15 +740,12 @@ struct ContentView: View {
                     stopCaffeinate()
                     selectedDuration = nil
 
-                case .shutdown:
-                    // Stop caffeinate first, then shut down the Mac
+                case .sleep:
+                    // Turn Coffein off, clear timer, then attempt system sleep
+                    isAwake = false
                     stopCaffeinate()
-                    _ = shell("osascript -e 'tell application \"System Events\" to shut down'")
-
-                case .logout:
-                    // Stop caffeinate first, then log out the current user session
-                    stopCaffeinate()
-                    _ = shell("osascript -e 'tell application \"System Events\" to log out'")
+                    selectedDuration = nil
+                    macSleep()
                 }
 
                 remainingSeconds = nil
@@ -775,35 +768,54 @@ struct ContentView: View {
     }
 
 
-    // MARK: - Shell helpers
+    // MARK: - Native Caffeinate Handling
+    @State private var caffeinateProcess: Process? = nil
 
     func runCaffeinate() {
-        _ = shell("nohup caffeinate -di >/dev/null 2>&1 &")
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/caffeinate")
+        task.arguments = ["-di"]
+
+        do {
+            try task.run()
+            caffeinateProcess = task
+            print("CAFFEINATE STARTED:", task.processIdentifier)
+        } catch {
+            print("FAILED TO START CAFFEINATE:", error)
+        }
     }
 
     func stopCaffeinate() {
-        _ = shell("killall caffeinate")
+        if let proc = caffeinateProcess {
+            proc.terminate()
+            caffeinateProcess = nil
+            print("CAFFEINATE TERMINATED")
+        } else {
+            print("NO CAFFEINATE PROCESS TO TERMINATE")
+        }
     }
 
     func isCaffeinateRunning() -> Bool {
-        let result = shell("pgrep caffeinate")
-        return result.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+        return caffeinateProcess != nil
     }
 
-    @discardableResult
-    func shell(_ cmd: String) -> String {
-        let task = Process()
-        let pipe = Pipe()
+    // MARK: - System actions
 
-        task.standardOutput = pipe
-        task.standardError = pipe
-        task.arguments = ["-c", cmd]
-        task.launchPath = "/bin/bash"
+    func macSleep() {
+        print("COFFEIN: Requesting system sleep via IOPMSleepSystem")
 
-        task.launch()
+        let port = IOPMFindPowerManagement(mach_port_t(MACH_PORT_NULL))
+        if port == 0 {
+            print("IOPMFindPowerManagement failed")
+            return
+        }
 
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        return String(data: data, encoding: .utf8) ?? ""
+        let result = IOPMSleepSystem(port)
+        if result != kIOReturnSuccess {
+            print("IOPMSleepSystem failed with code: \(result)")
+        }
+
+        IOServiceClose(port)
     }
 }
 

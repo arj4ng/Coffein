@@ -10,9 +10,22 @@
 		96E7F8DB2EE4BE36004AE15C /* Coffein.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Coffein.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		96F2B7E62EE5272B00E39D93 /* Exceptions for "Coffein" folder in "Coffein" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 96E7F8DA2EE4BE36004AE15C /* Coffein */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		96E7F8DD2EE4BE36004AE15C /* Coffein */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				96F2B7E62EE5272B00E39D93 /* Exceptions for "Coffein" folder in "Coffein" target */,
+			);
 			path = Coffein;
 			sourceTree = "<group>";
 		};
@@ -252,10 +265,12 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 341;
+				DEVELOPMENT_TEAM = NXDPMD2F68;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Coffein/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Coffein Shot";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -264,7 +279,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.syntax.Coffein;
+				PRODUCT_BUNDLE_IDENTIFIER = com.arj4ng.Coffein;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -285,10 +300,12 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 341;
+				DEVELOPMENT_TEAM = NXDPMD2F68;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Coffein/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Coffein Shot";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -297,7 +314,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.syntax.Coffein;
+				PRODUCT_BUNDLE_IDENTIFIER = com.arj4ng.Coffein;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
