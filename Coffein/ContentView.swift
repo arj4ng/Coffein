@@ -123,6 +123,12 @@ fileprivate let minutesFormatter: NumberFormatter = {
 fileprivate var caffeinateProcess: Process? = nil
 
 func runCaffeinate() {
+    // Avoid spawning multiple caffeinate processes from repeated calls
+    if let proc = caffeinateProcess, proc.isRunning {
+        print("CAFFEINATE ALREADY RUNNING (pid: \(proc.processIdentifier))")
+        return
+    }
+
     let task = Process()
     task.executableURL = URL(fileURLWithPath: "/usr/bin/caffeinate")
     task.arguments = ["-di"]
@@ -133,6 +139,7 @@ func runCaffeinate() {
         print("CAFFEINATE STARTED:", task.processIdentifier)
     } catch {
         print("FAILED TO START CAFFEINATE:", error)
+        caffeinateProcess = nil
     }
 }
 
@@ -225,15 +232,10 @@ struct ContentView: View {
             mainCard
         }
         .onAppear {
-            // On launch, always start in active state and ensure caffeinate is running
-            if isCaffeinateRunning() {
-                // If we somehow already have a tracked caffeinate process, reflect that
-                isAwake = true
-            } else {
-                isAwake = true
-                runCaffeinate()
-            }
-            coffeinIsAwakeFlag = isAwake
+            // On launch, always start in active state and explicitly start caffeinate
+            isAwake = true
+            coffeinIsAwakeFlag = true
+            runCaffeinate()
 
             // Always create the status item once; visibility is controlled by updateCoffeinStatusItem
             if coffeinStatusItem == nil {

@@ -120,6 +120,10 @@ class CoffeinAppDelegate: NSObject, NSApplicationDelegate {
 
         // Install as the app's main menu, replacing the default SwiftUI menus
         NSApp.mainMenu = mainMenu
+
+        // Start Coffein in active state and launch caffeinate once the app has finished launching.
+        coffeinIsAwakeFlag = true
+        runCaffeinate()
     }
 
 }
