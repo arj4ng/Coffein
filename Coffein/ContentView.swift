@@ -289,28 +289,32 @@ struct ContentView: View {
                             value: isAwake
                         )
 
-                    // Main circle
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: isAwake
-                                    ? [Color.green.opacity(0.55), Color.green.opacity(0.35)]
-                                    : [Color.gray.opacity(0.45), Color.gray.opacity(0.25)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .frame(width: 84, height: 84)
-                        .shadow(color: isAwake ? Color.green.opacity(0.7) : Color.black.opacity(0.6),
-                                radius: isAwake ? 18 : 10,
-                                x: 0, y: isAwake ? 10 : 6)
-                        .overlay(
+                    // Main button fill: static when idle, liquid gradient when active
+                    Group {
+                        if isAwake {
+                            LiquidGradientCircle(timerIntensity: timerIntensity)
+                        } else {
                             Circle()
-                                .stroke(Color.white.opacity(0.35), lineWidth: 1)
-                        )
+                                .fill(
+                                    LinearGradient(
+                                        colors: [Color.gray.opacity(0.45), Color.gray.opacity(0.25)],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                        }
+                    }
+                    .frame(width: 84, height: 84)
+                    .shadow(color: isAwake ? Color.green.opacity(0.7) : Color.black.opacity(0.6),
+                            radius: isAwake ? 18 : 10,
+                            x: 0, y: isAwake ? 10 : 6)
+                    .overlay(
+                        Circle()
+                            .stroke(Color.white.opacity(0.35), lineWidth: 1)
+                    )
 
                     // Icon
-                    Image(systemName: isAwake ? "power.circle.fill" : "power.circle")
+                    Image(systemName: isAwake ? "bolt.circle.fill" : "bolt.circle")
                         .font(.system(size: 54, weight: .regular))
                         .foregroundColor(.white)
                 }
@@ -343,7 +347,7 @@ struct ContentView: View {
 
             // Description
             VStack(spacing: 4) {
-                Text(isAwake ? "Your Mac won't sleep while this is on" : "Your Mac can sleep normally")
+                Text(isAwake ? "Your Mac won't sleep while activated" : "Your Mac can sleep normally")
                     .font(.system(size: 16, weight: .medium))
                 Text("Powered by the built-in `caffeinate` command to keep your Mac from dozing off.")
                     .font(.system(size: 14))
@@ -358,7 +362,7 @@ struct ContentView: View {
 
             // Footer tag
             Text("v1.0 · Made by arj4ng")
-                .font(.system(size: 10, weight: .regular))
+                .font(.system(size: 12, weight: .regular))
                 .foregroundStyle(.secondary)
                 .padding(.top, 6)
         }
@@ -647,6 +651,22 @@ struct ContentView: View {
         }
     }
 
+    /// 0 = no timer or just started, 1 = timer almost finished
+    private var timerIntensity: Double {
+        guard let selectedDuration,
+              let remainingSeconds,
+              remainingSeconds > 0 else {
+            return 0
+        }
+
+        let total = Int(selectedDuration)
+        guard total > 0 else { return 0 }
+
+        let ratio = max(0.0, min(1.0, Double(remainingSeconds) / Double(total)))
+        // Invert: 0 at start, 1 near the end
+        return 1.0 - ratio
+    }
+
     // MARK: - Timer helpers (logic)
 
     // Helper to apply the custom duration (hours + minutes) and schedule the timer
@@ -749,6 +769,53 @@ struct ContentView: View {
     }
 }
 
+
+// MARK: - Liquid Gradient Fill for Toggle
+
+private struct LiquidGradientCircle: View {
+    /// 0 = no timer / just started, 1 = timer nearly done
+    let timerIntensity: Double
+
+    @State private var animate: Bool = false
+
+    var body: some View {
+        // Base hue for "calm" green and a slightly warmer hue for urgency
+        let baseHue: Double = 0.33   // green-ish
+        let warmHue: Double = 0.18   // warmer yellow-green
+        let hue = baseHue - (baseHue - warmHue) * timerIntensity
+
+        let saturation: Double = 0.92
+        let innerBrightness: Double = 0.86 + 0.10 * timerIntensity
+        let outerBrightness: Double = 0.62 + 0.06 * timerIntensity
+
+        let inner = Color(hue: hue, saturation: saturation, brightness: innerBrightness)
+        let outer = Color(hue: hue, saturation: saturation, brightness: outerBrightness)
+
+        Circle()
+            .fill(
+                AngularGradient(
+                    gradient: Gradient(colors: [
+                        inner,
+                        outer,
+                        inner.opacity(0.95),
+                        outer.opacity(0.85),
+                        inner
+                    ]),
+                    center: .center
+                )
+            )
+            .rotationEffect(.degrees(animate ? 360 : 0))
+            .scaleEffect(1.0 + 0.03 * timerIntensity)
+            .opacity(1.0)
+            // Slow continuous spin for a liquid feel
+            .animation(.linear(duration: 16.0).repeatForever(autoreverses: false), value: animate)
+            // Smoothly react to timer urgency changes
+            .animation(.easeInOut(duration: 0.3), value: timerIntensity)
+            .onAppear {
+                animate = true
+            }
+    }
+}
 
 // Small helper to detect button press state
 private struct PressEventsModifier: ViewModifier {
