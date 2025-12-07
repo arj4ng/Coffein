@@ -24,6 +24,11 @@ import SwiftUI
 import AppKit
 import IOKit.pwr_mgt
 
+
+extension Notification.Name {
+    static let coffeinForceStop = Notification.Name("coffeinForceStop")
+}
+
 // Global menu bar status item for Coffein
 var coffeinStatusItem: NSStatusItem?
 
@@ -72,6 +77,54 @@ fileprivate let minutesFormatter: NumberFormatter = {
     return f
 }()
 
+// MARK: - Global Caffeinate Handling
+
+fileprivate var caffeinateProcess: Process? = nil
+
+func runCaffeinate() {
+    let task = Process()
+    task.executableURL = URL(fileURLWithPath: "/usr/bin/caffeinate")
+    task.arguments = ["-di"]
+
+    do {
+        try task.run()
+        caffeinateProcess = task
+        print("CAFFEINATE STARTED:", task.processIdentifier)
+    } catch {
+        print("FAILED TO START CAFFEINATE:", error)
+    }
+}
+
+func stopCaffeinate() {
+    // First try to terminate the tracked Process, if we still have it
+    if let proc = caffeinateProcess {
+        proc.terminate()
+        caffeinateProcess = nil
+        print("CAFFEINATE TERMINATED (tracked process)")
+    } else {
+        print("NO TRACKED CAFFEINATE PROCESS – attempting killall for safety")
+    }
+
+    // Extra safety: kill any remaining caffeinate processes owned by this user
+    let killTask = Process()
+    killTask.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
+    killTask.arguments = ["caffeinate"]
+
+    do {
+        try killTask.run()
+        killTask.waitUntilExit()
+        print("killall caffeinate exit status:", killTask.terminationStatus)
+    } catch {
+        // It's fine if there was nothing to kill; log for debugging
+        print("FAILED TO RUN killall caffeinate:", error)
+    }
+}
+
+func isCaffeinateRunning() -> Bool {
+    return caffeinateProcess != nil
+}
+
+
 extension NSApplication {
     /// Called from the status item to bring Coffein to the front
     @objc func bringCoffeinToFront(_ sender: Any?) {
@@ -82,6 +135,7 @@ extension NSApplication {
         }
     }
 }
+
 
 struct ContentView: View {
     enum TimerEndAction: String, CaseIterable, Identifiable {
@@ -768,36 +822,6 @@ struct ContentView: View {
     }
 
 
-    // MARK: - Native Caffeinate Handling
-    @State private var caffeinateProcess: Process? = nil
-
-    func runCaffeinate() {
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/bin/caffeinate")
-        task.arguments = ["-di"]
-
-        do {
-            try task.run()
-            caffeinateProcess = task
-            print("CAFFEINATE STARTED:", task.processIdentifier)
-        } catch {
-            print("FAILED TO START CAFFEINATE:", error)
-        }
-    }
-
-    func stopCaffeinate() {
-        if let proc = caffeinateProcess {
-            proc.terminate()
-            caffeinateProcess = nil
-            print("CAFFEINATE TERMINATED")
-        } else {
-            print("NO CAFFEINATE PROCESS TO TERMINATE")
-        }
-    }
-
-    func isCaffeinateRunning() -> Bool {
-        return caffeinateProcess != nil
-    }
 
     // MARK: - System actions
 

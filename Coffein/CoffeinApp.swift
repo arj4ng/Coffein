@@ -12,6 +12,9 @@ class CoffeinAppDelegate: NSObject, NSApplicationDelegate {
     private var aboutWindow: NSWindow?
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        // Debug: see when this is actually called
+        print("[Coffein] applicationShouldTerminate called. coffeinIsAwakeFlag =", coffeinIsAwakeFlag)
+
         // If Coffein is actively preventing sleep, ask the user before quitting.
         if coffeinIsAwakeFlag {
             let alert = NSAlert()
@@ -23,16 +26,27 @@ class CoffeinAppDelegate: NSObject, NSApplicationDelegate {
 
             let response = alert.runModal()
             if response == .alertFirstButtonReturn {
-                // Allow quit / shutdown / logout
+                // User chose to quit anyway: always stop caffeinate before exiting
+                print("[Coffein] User chose Quit Anyway – stopping caffeinate before quit")
+                stopCaffeinate()
+                coffeinIsAwakeFlag = false
                 return .terminateNow
             } else {
-                // Block termination
+                // User cancelled quit
                 return .terminateCancel
             }
         }
 
-        // If not active, quit normally.
+        // If not marked as awake, still make sure nothing is left running
+        print("[Coffein] Not marked as awake on quit – calling stopCaffeinate() just in case")
+        stopCaffeinate()
         return .terminateNow
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        // Last-resort safety: if anything slipped through, stop caffeinate now
+        print("[Coffein] applicationWillTerminate – final stopCaffeinate() call")
+        stopCaffeinate()
     }
 
     @objc func showAboutPanel(_ sender: Any?) {
