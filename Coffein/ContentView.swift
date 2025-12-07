@@ -26,6 +26,9 @@ import AppKit
 // Global menu bar status item for Coffein
 var coffeinStatusItem: NSStatusItem?
 
+// Global flag so the app delegate knows if Coffein is actively preventing sleep
+var coffeinIsAwakeFlag: Bool = false
+
 /// Updates the menu bar icon & tooltip based on Coffein state
 func updateCoffeinStatusItem(isAwake: Bool) {
     guard let button = coffeinStatusItem?.button else { return }
@@ -95,6 +98,7 @@ struct ContentView: View {
             }
         }
     }
+    @Environment(\.colorScheme) private var colorScheme
     @State private var isAwake = false
     @State private var isPressing = false
     @State private var hoverClose = false
@@ -117,6 +121,7 @@ struct ContentView: View {
         .onAppear {
             // Detect initial state (in case caffeinate is already running)
             isAwake = isCaffeinateRunning()
+            coffeinIsAwakeFlag = isAwake
 
             // Always create the status item once; visibility is controlled by updateCoffeinStatusItem
             if coffeinStatusItem == nil {
@@ -170,7 +175,8 @@ struct ContentView: View {
             }
         }
         .onChange(of: isAwake) {
-            // Status item is created once on appear; here we just update visibility & glyph
+            // Keep global flag and status item in sync
+            coffeinIsAwakeFlag = isAwake
             updateCoffeinStatusItem(isAwake: isAwake)
         }
     }
@@ -232,7 +238,7 @@ struct ContentView: View {
                         .font(.system(size: 18, weight: .semibold))
                     Text("Stop your Mac from sleeping")
                         .font(.system(size: 14, weight: .regular))
-                        .foregroundStyle(.secondary)
+                        .foregroundColor(colorScheme == .dark ? .secondary : .primary.opacity(0.7))
                 }
 
                 Spacer()
@@ -244,12 +250,15 @@ struct ContentView: View {
                         .frame(width: 8, height: 8)
                     Text(isAwake ? "Active" : "Idle")
                         .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(colorScheme == .dark ? .primary : .primary)
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
                 .background(
                     Capsule()
-                        .fill(Color.white.opacity(0.08))
+                        .fill(colorScheme == .dark
+                              ? Color.white.opacity(0.08)
+                              : Color.black.opacity(0.06))
                 )
             }
 
@@ -351,7 +360,7 @@ struct ContentView: View {
                     .font(.system(size: 16, weight: .medium))
                 Text("Powered by the built-in `caffeinate` command to keep your Mac from dozing off.")
                     .font(.system(size: 14))
-                    .foregroundStyle(.secondary)
+                    .foregroundColor(colorScheme == .dark ? .secondary : .primary.opacity(0.7))
                     .multilineTextAlignment(.center)
             }
             .fixedSize(horizontal: false, vertical: true)
@@ -363,7 +372,7 @@ struct ContentView: View {
             // Footer tag
             Text("v1.0 · Made by arj4ng")
                 .font(.system(size: 12, weight: .regular))
-                .foregroundStyle(.secondary)
+                .foregroundColor(colorScheme == .dark ? .secondary : .primary.opacity(0.65))
                 .padding(.top, 6)
         }
         .padding(.top, 24)
@@ -371,10 +380,19 @@ struct ContentView: View {
         .padding(.bottom, 8)
         .frame(width: 360)
         .background(
-            .ultraThinMaterial,
-            in: RoundedRectangle(cornerRadius: 24, style: .continuous)
+            ZStack {
+                // In light mode, put a bright white base *behind* the material
+                if colorScheme == .light {
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .fill(Color.white.opacity(0.9))
+                }
+                // Shared glassy material layer for both light and dark
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(.ultraThinMaterial)
+            }
         )
         .overlay(
+            // Only a subtle border on top – no white overlay over the content
             RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .stroke(Color.white.opacity(0.15), lineWidth: 1)
         )
@@ -396,7 +414,7 @@ struct ContentView: View {
                     Spacer()
                     Text(selectedDuration == nil ? "Off" : timerSummaryText)
                         .font(.system(size: 14))
-                        .foregroundStyle(.secondary)
+                        .foregroundColor(colorScheme == .dark ? .secondary : .primary.opacity(0.7))
                     ZStack {
                         Circle()
                             .fill(Color.white.opacity(0.10))
@@ -437,8 +455,11 @@ struct ContentView: View {
                     .foregroundColor(.primary)
                     .frame(width: 48, height: 48)
                     .background(
-                        Circle()
-                            .fill(selectedDuration == nil ? Color.white.opacity(0.22) : Color.white.opacity(0.08))
+                        Circle().fill(
+                            selectedDuration == nil
+                            ? (colorScheme == .dark ? Color.white.opacity(0.22) : Color.black.opacity(0.10))
+                            : (colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.06))
+                        )
                     )
             }
             .buttonStyle(.plain)
@@ -456,8 +477,11 @@ struct ContentView: View {
                 }
                 .frame(width: 48, height: 48)
                 .background(
-                    Circle()
-                        .fill((selectedDuration == 30 * 60) ? Color.white.opacity(0.22) : Color.white.opacity(0.08))
+                    Circle().fill(
+                        (selectedDuration == 30 * 60)
+                        ? (colorScheme == .dark ? Color.white.opacity(0.22) : Color.black.opacity(0.10))
+                        : (colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.06))
+                    )
                 )
             }
             .buttonStyle(.plain)
@@ -475,8 +499,11 @@ struct ContentView: View {
                 }
                 .frame(width: 48, height: 48)
                 .background(
-                    Circle()
-                        .fill((selectedDuration == 60 * 60) ? Color.white.opacity(0.22) : Color.white.opacity(0.08))
+                    Circle().fill(
+                        (selectedDuration == 60 * 60)
+                        ? (colorScheme == .dark ? Color.white.opacity(0.22) : Color.black.opacity(0.10))
+                        : (colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.06))
+                    )
                 )
             }
             .buttonStyle(.plain)
@@ -494,8 +521,11 @@ struct ContentView: View {
                 }
                 .frame(width: 48, height: 48)
                 .background(
-                    Circle()
-                        .fill((selectedDuration == 2 * 60 * 60) ? Color.white.opacity(0.22) : Color.white.opacity(0.08))
+                    Circle().fill(
+                        (selectedDuration == 2 * 60 * 60)
+                        ? (colorScheme == .dark ? Color.white.opacity(0.22) : Color.black.opacity(0.10))
+                        : (colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.06))
+                    )
                 )
             }
             .buttonStyle(.plain)
@@ -513,8 +543,11 @@ struct ContentView: View {
                 }
                 .frame(width: 48, height: 48)
                 .background(
-                    Circle()
-                        .fill((selectedDuration == 3 * 60 * 60) ? Color.white.opacity(0.22) : Color.white.opacity(0.08))
+                    Circle().fill(
+                        (selectedDuration == 3 * 60 * 60)
+                        ? (colorScheme == .dark ? Color.white.opacity(0.22) : Color.black.opacity(0.10))
+                        : (colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.06))
+                    )
                 )
             }
             .buttonStyle(.plain)
@@ -536,7 +569,7 @@ struct ContentView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Hours")
                             .font(.system(size: 10, weight: .regular))
-                            .foregroundStyle(.secondary)
+                            .foregroundColor(colorScheme == .dark ? .secondary : .primary.opacity(0.7))
 
                         Stepper(value: $customHours, in: 0...24) {
                             TextField("0", value: $customHours, formatter: hoursFormatter)
@@ -550,7 +583,7 @@ struct ContentView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Minutes")
                             .font(.system(size: 10, weight: .regular))
-                            .foregroundStyle(.secondary)
+                            .foregroundColor(colorScheme == .dark ? .secondary : .primary.opacity(0.7))
 
                         Stepper(value: $customMinutes, in: 0...59) {
                             TextField("0", value: $customMinutes, formatter: minutesFormatter)
@@ -564,7 +597,7 @@ struct ContentView: View {
                 .padding(.vertical, 4)
                 .background(
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.white.opacity(0.10))
+                        .fill(colorScheme == .dark ? Color.white.opacity(0.10) : Color.black.opacity(0.05))
                 )
             }
         }
@@ -573,7 +606,11 @@ struct ContentView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(isCustomSelected ? Color.white.opacity(0.18) : Color.white.opacity(0.06))
+                .fill(
+                    isCustomSelected
+                    ? (colorScheme == .dark ? Color.white.opacity(0.18) : Color.black.opacity(0.10))
+                    : (colorScheme == .dark ? Color.white.opacity(0.06) : Color.black.opacity(0.05))
+                )
         )
         .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .onTapGesture {
@@ -594,6 +631,7 @@ struct ContentView: View {
             HStack(spacing: 8) {
                 Text("When timer ends")
                     .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(colorScheme == .dark ? .primary : .primary)
                 Spacer()
                 Picker("When timer ends", selection: $timerEndAction) {
                     Text("Deactivate Coffein").tag(TimerEndAction.deactivate)
@@ -609,7 +647,7 @@ struct ContentView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color.white.opacity(0.06))
+                .fill(colorScheme == .dark ? Color.white.opacity(0.06) : Color.black.opacity(0.05))
         )
         .font(.system(size: 11))
     }
