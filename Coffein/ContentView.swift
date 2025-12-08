@@ -24,6 +24,21 @@ import SwiftUI
 import AppKit
 import IOKit.pwr_mgt
 
+private let cardCornerRadius: CGFloat = 24
+
+/// Shared glass background used by both main card and settings
+@ViewBuilder
+private func coffeinGlassBackground(colorScheme: ColorScheme) -> some View {
+    ZStack {
+        if colorScheme == .light {
+            RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
+                .fill(Color.white.opacity(0.9))
+        }
+        RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
+            .fill(.ultraThinMaterial)
+    }
+}
+
 
 extension Notification.Name {
     static let coffeinForceStop        = Notification.Name("coffeinForceStop")
@@ -727,7 +742,7 @@ struct ContentView: View {
 
                 // Footer tag
                 Text("v1.0 · Made by arj4ng")
-                    .font(.system(size: 12, weight: .regular))
+                    .font(.system(size: 10, weight: .regular))
                     .foregroundColor(colorScheme == .dark ? .secondary : .primary.opacity(0.65))
                     .padding(.top, 6)
             }
@@ -736,14 +751,7 @@ struct ContentView: View {
             .padding(.bottom, 8)
             .frame(width: 360)
             .background(
-                ZStack {
-                    if colorScheme == .light {
-                        RoundedRectangle(cornerRadius: 24, style: .continuous)
-                            .fill(Color.white.opacity(0.9))
-                    }
-                    RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .fill(.ultraThinMaterial)
-                }
+                coffeinGlassBackground(colorScheme: colorScheme)
             )
             // Small corner settings button on the card itself
             .overlay(alignment: .topTrailing) {
@@ -772,7 +780,7 @@ struct ContentView: View {
             }
             // Clip the entire card (content + background + overlay) to rounded corners,
             // then apply the shadow so it follows the rounded shape instead of a rectangle.
-            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous))
 
             if isShowingSettings {
                 SettingsView(onClose: {
@@ -783,7 +791,10 @@ struct ContentView: View {
                     }
                 })
                 .frame(width: 360)
-                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                .background(
+                    coffeinGlassBackground(colorScheme: colorScheme)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous))
             }
         }
     }
