@@ -144,11 +144,11 @@ enum CoffeinSleepMode: String, CaseIterable {
     var modeDescription: String {
         switch self {
         case .systemAndDisplay:
-            return "Prevents both your Mac and its display from sleeping while Coffein is active."
+            return "Prevents both your Mac and its display from sleeping while Coffein is active"
         case .systemOnly:
-            return "Prevents your Mac from going to sleep, but allows the display to turn off normally."
+            return "Prevents your Mac from going to sleep, but allows the display to turn off normally"
         case .displayOnly:
-            return "Keeps the display on while Coffein is active; system sleep follows macOS settings."
+            return "Keeps the display on while Coffein is active; system sleep follows macOS settings"
         }
     }
 }
@@ -312,6 +312,29 @@ extension NSApplication {
 }
 
 
+enum CoffeinThemeMode: String, CaseIterable {
+    case system
+    case light
+    case dark
+
+    var displayName: String {
+        switch self {
+        case .system: return "Automatic"
+        case .light:  return "Light"
+        case .dark:   return "Dark"
+        }
+    }
+
+    /// Maps the theme mode to an optional ColorScheme. `.system` => nil (use system).
+    var preferredColorScheme: ColorScheme? {
+        switch self {
+        case .system: return nil
+        case .light:  return .light
+        case .dark:   return .dark
+        }
+    }
+}
+
 struct ContentView: View {
     enum TimerEndAction: String, CaseIterable, Identifiable {
         case deactivate
@@ -349,6 +372,14 @@ struct ContentView: View {
     @AppStorage("coffein_customMinutes")     private var storedCustomMinutes: Int = 0
     @AppStorage("coffein_isTimerExpanded")   private var storedIsTimerExpanded: Bool = false
 
+    @AppStorage("coffein_theme_mode") private var themeModeRaw: String = CoffeinThemeMode.system.rawValue
+
+    /// The color scheme Coffein should use, based on the selected theme mode.
+    private var effectiveColorScheme: ColorScheme? {
+        CoffeinThemeMode(rawValue: themeModeRaw)?.preferredColorScheme
+            ?? CoffeinThemeMode.system.preferredColorScheme
+    }
+
     // Convenience wrapper so UI works with the enum instead of raw strings
     private var timerEndAction: TimerEndAction {
         get { TimerEndAction(rawValue: timerEndActionRaw) ?? .deactivate }
@@ -357,12 +388,14 @@ struct ContentView: View {
 
     var body: some View {
         ZStack {
-            // Explicitly transparent root background so the window content
-            // itself doesn't draw a rectangular underlay behind our card.
-            Color.clear
             mainCard
         }
         .background(Color.clear)
+        // Apply the selected theme (system / light / dark) to the whole window.
+        .preferredColorScheme(effectiveColorScheme)
+        // Extend content into the top/titlebar region so there is no unused
+        // "ghost" area above the card where the default window chrome would be.
+        .ignoresSafeArea(edges: .top)
         .onAppear {
             // On launch, always start in active state and explicitly start caffeinate
             isAwake = true
@@ -444,17 +477,10 @@ struct ContentView: View {
                     window.backgroundColor = .clear
                     window.hasShadow = false
 
-                    // Make this a borderless, fully custom window that only shows our card,
-                    // but keep it miniaturizable so our custom window controls can minimize it.
-                    var style = window.styleMask
-                    style.remove([.titled, .closable, .resizable])
-                    style.insert([.fullSizeContentView, .miniaturizable])
-                    window.styleMask = style
-
+                    // Let SwiftUI / AppKit manage resizability and style;
+                    // we only make the window movable by background and hide
+                    // the native traffic lights so our custom ones are used.
                     window.isMovableByWindowBackground = true
-
-                    // Initial sizing based on current UI state
-                    updateWindowSize(animated: false)
 
                     window.standardWindowButton(.closeButton)?.isHidden = true
                     window.standardWindowButton(.miniaturizeButton)?.isHidden = true
@@ -488,11 +514,11 @@ struct ContentView: View {
             updateCoffeinStatusItem(isAwake: isAwake, tooltip: statusTooltip)
         }
         .onChange(of: isTimerExpanded) {
+            // Persist expansion state only; let SwiftUI manage content size.
             storedIsTimerExpanded = isTimerExpanded
-            updateWindowSize()
         }
         .onChange(of: isShowingSettings) {
-            updateWindowSize()
+            // No manual window resize here; keep behavior simple and stable.
         }
         .onChange(of: remainingSeconds, initial: false) {
             updateCoffeinStatusItem(isAwake: isAwake, tooltip: statusTooltip)
@@ -755,7 +781,9 @@ struct ContentView: View {
             // Small corner settings button on the card itself
             .overlay(alignment: .topTrailing) {
                 Button {
-                    isShowingSettings = true
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isShowingSettings = true
+                    }
                 } label: {
                     Text("􀣌")
                         .font(.system(size: 11, weight: .medium))
@@ -781,14 +809,15 @@ struct ContentView: View {
             if isShowingSettings {
                 SettingsView(onClose: {
                     // Only close the settings overlay, do not touch the main window
-                    isShowingSettings = false
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isShowingSettings = false
+                    }
                 })
                 .frame(width: 360)
                 .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .animation(.easeInOut(duration: 0.22), value: isAwake)
-        .animation(.easeInOut(duration: 0.2), value: isShowingSettings)
     }
 
     // Extracted auto-off section to keep mainCard smaller
@@ -1071,35 +1100,7 @@ struct ContentView: View {
         window.setFrame(newFrame, display: true, animate: true)
     }
 
-    /// Updates the main window size based on the current UI state.
-    /// Uses fixed heights instead of measuring SwiftUI layout to avoid
-    /// re-entrant layout issues with NSHostingView.
-    private func updateWindowSize(animated: Bool = true) {
-        guard let window = mainWindow() else { return }
 
-        let targetWidth: CGFloat = 360
-        let targetHeight: CGFloat
-
-        if isTimerExpanded && !isShowingSettings {
-            // Main window with timer section expanded (no settings overlay)
-            targetHeight = 390
-        } else {
-            // Default / compact height for both main and settings
-            targetHeight = 330
-        }
-
-        var frame = window.frame
-        let currentHeight = frame.size.height
-        let deltaHeight = targetHeight - currentHeight
-
-        // Anchor top edge so the window doesn't "drop" when shrinking
-        frame.origin.y -= deltaHeight
-        frame.size.height = targetHeight
-        frame.size.width = targetWidth
-
-        window.setFrame(frame, display: true, animate: animated)
-        window.minSize = NSSize(width: targetWidth, height: targetHeight)
-    }
 
 
     // MARK: - Timer helpers (UI)
@@ -1284,6 +1285,7 @@ private struct LiquidGradientCircle: View {
     @State private var spin1: Double = 0
     @State private var spin2: Double = 0
     @State private var spin3: Double = 0
+    @State private var didStartSpins: Bool = false
 
     var body: some View {
         // timerIntensity: 0 = just started, 1 = almost finished
@@ -1348,6 +1350,10 @@ private struct LiquidGradientCircle: View {
         // Smoothly react as the timer counts down
         .animation(.easeInOut(duration: 0.35), value: timerIntensity)
         .onAppear {
+            // Ensure we only start the repeat-forever spin animations once
+            guard !didStartSpins else { return }
+            didStartSpins = true
+
             // Slow but distinct rotations for each layer (like different wave durations)
             spin1 = 0
             spin2 = 0

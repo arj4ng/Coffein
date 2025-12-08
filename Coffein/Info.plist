@@ -1,19 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
-<dict>
-	<key>CAFFEINATE STARTED: 12496
-Unable to obtain a task name port right for pid 425: (os/kern) failure (0x5)
-CAFFEINATE TERMINATED
-FSFindFolder failed with error=-43
-FSFindFolder failed with error=-43
-APPLE SCRIPT ERROR: {
-    NSAppleScriptErrorAppName = "System Events";
-    NSAppleScriptErrorBriefMessage = "Application isn\U2019t running.";
-    NSAppleScriptErrorMessage = "System Events got an error: Application isn\U2019t running.";
-    NSAppleScriptErrorNumber = "-600";
-    NSAppleScriptErrorRange = "NSRange: {31, 14}";
-NSAppleEventsUsageDescription</key>
-	<string>Coffein uses Apple Events to shut down or log out your Mac when a timer ends.</string>
-</dict>
+<dict/>
 </plist>
