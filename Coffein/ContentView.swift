@@ -357,8 +357,12 @@ struct ContentView: View {
 
     var body: some View {
         ZStack {
+            // Explicitly transparent root background so the window content
+            // itself doesn't draw a rectangular underlay behind our card.
+            Color.clear
             mainCard
         }
+        .background(Color.clear)
         .onAppear {
             // On launch, always start in active state and explicitly start caffeinate
             isAwake = true
@@ -438,20 +442,19 @@ struct ContentView: View {
 
                     window.isOpaque = false
                     window.backgroundColor = .clear
-                    window.hasShadow = false   // disable system shadow/border
+                    window.hasShadow = false
 
-                    // Use a normal titled window with full-size content so it can be key
+                    // Make this a borderless, fully custom window that only shows our card,
+                    // but keep it miniaturizable so our custom window controls can minimize it.
                     var style = window.styleMask
-                    style.insert([.titled, .fullSizeContentView, .closable, .miniaturizable])
-                    style.remove(.resizable)
+                    style.remove([.titled, .closable, .resizable])
+                    style.insert([.fullSizeContentView, .miniaturizable])
                     window.styleMask = style
+
                     window.isMovableByWindowBackground = true
 
-                    if let contentView = window.contentView {
-                        let size = contentView.fittingSize
-                        window.setContentSize(size)
-                        window.minSize = size
-                    }
+                    // Initial sizing based on current UI state
+                    updateWindowSize(animated: false)
 
                     window.standardWindowButton(.closeButton)?.isHidden = true
                     window.standardWindowButton(.miniaturizeButton)?.isHidden = true
@@ -486,6 +489,10 @@ struct ContentView: View {
         }
         .onChange(of: isTimerExpanded) {
             storedIsTimerExpanded = isTimerExpanded
+            updateWindowSize()
+        }
+        .onChange(of: isShowingSettings) {
+            updateWindowSize()
         }
         .onChange(of: remainingSeconds, initial: false) {
             updateCoffeinStatusItem(isAwake: isAwake, tooltip: statusTooltip)
@@ -526,15 +533,23 @@ struct ContentView: View {
                     Circle()
                         .fill(hoverClose ? Color.red.opacity(1.0) : Color.red.opacity(0.75))
                         .frame(width: 12, height: 12)
+                        .overlay(
+                            Image(systemName: "xmark")
+                                .font(.system(size: 7, weight: .bold))
+                                .foregroundColor(Color.black.opacity(0.75))
+                                .opacity(hoverClose ? 1.0 : 0.0)
+                        )
                         .onHover { hoverClose = $0 }
                         .animation(.easeInOut(duration: 0.15), value: hoverClose)
                         .onTapGesture {
-                            if isAwake {
-                                // When Coffein is active, just minimize the window
-                                NSApp.keyWindow?.miniaturize(nil)
-                            } else {
-                                // When Coffein is idle, close the app completely
-                                NSApp.terminate(nil)
+                            if let window = mainWindow() {
+                                if isAwake {
+                                    // When Coffein is active, just minimize the window
+                                    window.miniaturize(nil)
+                                } else {
+                                    // When Coffein is idle, close the app completely
+                                    NSApp.terminate(nil)
+                                }
                             }
                         }
 
@@ -542,17 +557,33 @@ struct ContentView: View {
                     Circle()
                         .fill(hoverMin ? Color.yellow.opacity(1.0) : Color.yellow.opacity(0.75))
                         .frame(width: 12, height: 12)
+                        .overlay(
+                            Image(systemName: "minus")
+                                .font(.system(size: 7, weight: .bold))
+                                .foregroundColor(Color.black.opacity(0.75))
+                                .opacity(hoverMin ? 1.0 : 0.0)
+                        )
                         .onHover { hoverMin = $0 }
                         .animation(.easeInOut(duration: 0.15), value: hoverMin)
-                        .onTapGesture { NSApp.keyWindow?.miniaturize(nil) }
+                        .onTapGesture {
+                            mainWindow()?.miniaturize(nil)
+                        }
 
-                    // Zoom
+                    // Zoom / Center
                     Circle()
                         .fill(hoverZoom ? Color.green.opacity(1.0) : Color.green.opacity(0.75))
                         .frame(width: 12, height: 12)
+                        .overlay(
+                            Image(systemName: "arrow.up.left.and.arrow.down.right")
+                                .font(.system(size: 6.5, weight: .bold))
+                                .foregroundColor(Color.black.opacity(0.75))
+                                .opacity(hoverZoom ? 1.0 : 0.0)
+                        )
                         .onHover { hoverZoom = $0 }
                         .animation(.easeInOut(duration: 0.15), value: hoverZoom)
-                        .onTapGesture { NSApp.keyWindow?.zoom(nil) }
+                        .onTapGesture {
+                            centerMainWindow()
+                        }
 
                     Spacer()
                 }
@@ -742,7 +773,9 @@ struct ContentView: View {
                 .padding(.trailing, 14)
                 .padding(.top, 12)
             }
-            .shadow(color: Color.black.opacity(0.6), radius: 24, x: 0, y: 18)
+            // Clip the entire card (content + background + overlay) to rounded corners,
+            // then apply the shadow so it follows the rounded shape instead of a rectangle.
+            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
 
             // In-card settings overlay instead of a macOS sheet
             if isShowingSettings {
@@ -1017,6 +1050,57 @@ struct ContentView: View {
         )
         .font(.system(size: 11))
     }
+
+    // MARK: - Window helper
+
+    /// Returns the main Coffein window (key window if available, otherwise first app window).
+    private func mainWindow() -> NSWindow? {
+        NSApp.keyWindow ?? NSApp.windows.first
+    }
+
+    /// Centers the main window on its current screen.
+    private func centerMainWindow() {
+        guard let window = mainWindow() else { return }
+        guard let screen = window.screen ?? NSScreen.main else { return }
+
+        let screenFrame = screen.visibleFrame
+        var newFrame = window.frame
+        newFrame.origin.x = screenFrame.midX - newFrame.size.width / 2
+        newFrame.origin.y = screenFrame.midY - newFrame.size.height / 2
+
+        window.setFrame(newFrame, display: true, animate: true)
+    }
+
+    /// Updates the main window size based on the current UI state.
+    /// Uses fixed heights instead of measuring SwiftUI layout to avoid
+    /// re-entrant layout issues with NSHostingView.
+    private func updateWindowSize(animated: Bool = true) {
+        guard let window = mainWindow() else { return }
+
+        let targetWidth: CGFloat = 360
+        let targetHeight: CGFloat
+
+        if isTimerExpanded && !isShowingSettings {
+            // Main window with timer section expanded (no settings overlay)
+            targetHeight = 390
+        } else {
+            // Default / compact height for both main and settings
+            targetHeight = 330
+        }
+
+        var frame = window.frame
+        let currentHeight = frame.size.height
+        let deltaHeight = targetHeight - currentHeight
+
+        // Anchor top edge so the window doesn't "drop" when shrinking
+        frame.origin.y -= deltaHeight
+        frame.size.height = targetHeight
+        frame.size.width = targetWidth
+
+        window.setFrame(frame, display: true, animate: animated)
+        window.minSize = NSSize(width: targetWidth, height: targetHeight)
+    }
+
 
     // MARK: - Timer helpers (UI)
 
@@ -1304,3 +1388,4 @@ private extension View {
         self.modifier(PressEventsModifier(onPress: onPress, onRelease: onRelease))
     }
 }
+

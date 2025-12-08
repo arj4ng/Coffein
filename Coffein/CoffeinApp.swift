@@ -74,8 +74,8 @@ class CoffeinAppDelegate: NSObject, NSApplicationDelegate {
         let fittingSize = hostingController.view.fittingSize
 
         // Add a little extra breathing room so it doesn't feel cramped at the edges.
-        let targetWidth = max(320, fittingSize.width)
-        let targetHeight = max(260, fittingSize.height)
+        let targetWidth = max(340, fittingSize.width + 24)
+        let targetHeight = max(320, fittingSize.height + 24)
 
         window.setContentSize(NSSize(width: targetWidth, height: targetHeight))
         window.center()
@@ -162,8 +162,8 @@ private struct AboutView: View {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .fill(
                     colorScheme == .dark
-                    ? Color.white.opacity(0.04)
-                    : Color.black.opacity(0.03)
+                    ? Color.white.opacity(0.00)
+                    : Color.black.opacity(0.00)
                 )
                 .background(.ultraThinMaterial)
                 .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
@@ -174,7 +174,7 @@ private struct AboutView: View {
                     Image(nsImage: icon)
                         .resizable()
                         .aspectRatio(contentMode: .fit)
-                        .frame(width: 56, height: 56)
+                        .frame(width: 56, height: 80)
                         .cornerRadius(12)
                         .shadow(radius: 8, y: 4)
                 }
@@ -197,7 +197,7 @@ private struct AboutView: View {
                         .font(.system(size: 14, weight: .medium))
                         .foregroundColor(.primary)
 
-                    Text("Coffein wraps the built‑in “caffeinate” command in a clean, focused UI so you can stop your Mac from falling asleep during long renders, uploads, gaming sessions or late‑night coding.")
+                    Text("Coffein uses macOS power assertions under the hood, in a clean, focused UI, so you can stop your Mac from falling asleep during long renders, uploads, gaming sessions or late‑night coding—without relying on the old “caffeinate” command.")
                         .font(.system(size: 13))
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
@@ -237,5 +237,6 @@ private struct AboutView: View {
             .frame(maxWidth: 320)
         }
         .padding(8)
+        .frame(minWidth: 320, minHeight: 260)
     }
 }

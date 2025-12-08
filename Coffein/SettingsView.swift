@@ -153,30 +153,22 @@ struct SettingsView: View {
                         )
                 )
 
-                // MARK: Power / Sleep Behaviour section label
-                Text("Power")
-                    .font(.system(size: 11, weight: .semibold))
-                    .textCase(.uppercase)
-                    .foregroundColor(.secondary)
-                    .padding(.top, 4)
-
                 // MARK: Power section card
                 VStack(alignment: .leading, spacing: 10) {
-                    HStack(alignment: .center, spacing: 10) {
+                    HStack(alignment: .top, spacing: 10) {
                         Image(systemName: "bolt.fill")
                             .font(.system(size: 16, weight: .semibold))
                             .foregroundColor(.secondary)
+                            .padding(.top, 2)
 
                         VStack(alignment: .leading, spacing: 3) {
-                            Text("Keep-awake behavior")
+                            Text("Behavior")
                                 .font(.system(size: 13, weight: .medium))
+                                .layoutPriority(1) // prefer truncating other views before this
 
-                            Text("Choose how Coffein keeps your Mac awake.")
-                                .font(.system(size: 11))
-                                .foregroundColor(.secondary)
                         }
 
-                        Spacer()
+                        Spacer(minLength: 8)
 
                         Picker("", selection: $selectedMode) {
                             ForEach(CoffeinSleepMode.allCases, id: \.self) { mode in
@@ -185,7 +177,8 @@ struct SettingsView: View {
                         }
                         .labelsHidden()
                         .pickerStyle(.menu)
-                        .frame(width: 170)
+                        .fixedSize()              // keep the menu tight
+                        .frame(maxWidth: 150)     // don't push too far into the text
                     }
 
                     Text(selectedMode.modeDescription)
