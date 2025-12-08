@@ -350,7 +350,7 @@ struct ContentView: View {
         }
     }
     @Environment(\.colorScheme) private var colorScheme
-    @State private var isAwake = true
+    @State private var isAwake = false
     @State private var isPressing = false
     @State private var hoverClose = false
     @State private var hoverMin = false
@@ -371,6 +371,10 @@ struct ContentView: View {
     @AppStorage("coffein_customHours")       private var storedCustomHours: Int = 0
     @AppStorage("coffein_customMinutes")     private var storedCustomMinutes: Int = 0
     @AppStorage("coffein_isTimerExpanded")   private var storedIsTimerExpanded: Bool = false
+    
+    // Persist core state across launches
+    @AppStorage("coffein_isAwake") private var storedIsAwake: Bool = true
+    @AppStorage("coffein_selectedDurationSeconds") private var storedSelectedDurationSeconds: Int = 0
 
     @AppStorage("coffein_theme_mode") private var themeModeRaw: String = CoffeinThemeMode.system.rawValue
 
@@ -397,76 +401,29 @@ struct ContentView: View {
         // "ghost" area above the card where the default window chrome would be.
         .ignoresSafeArea(edges: .top)
         .onAppear {
-            // On launch, always start in active state and explicitly start caffeinate
-            isAwake = true
-            coffeinIsAwakeFlag = true
-            runCaffeinate()
+            // Restore persisted awake state and selected duration
+            isAwake = storedIsAwake
+            coffeinIsAwakeFlag = isAwake
 
-            // Always create the status item once; visibility is controlled by updateCoffeinStatusItem
-            if coffeinStatusItem == nil {
-                let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-
-                if let button = item.button {
-                    button.image = nil
-                    button.title = ""
-                    button.toolTip = "Coffein"
-                    // Main click just shows the menu; no explicit action needed here
-                }
-
-                // Build dropdown menu for the status item
-                let menu = NSMenu()
-
-                // First line: current state/tooltip (disabled)
-                let stateItem = NSMenuItem(title: statusTooltip, action: nil, keyEquivalent: "")
-                stateItem.isEnabled = false
-                menu.addItem(stateItem)
-                menu.addItem(NSMenuItem.separator())
-
-                // Open main UI
-                let openItem = NSMenuItem(title: "Open Coffein", action: #selector(CoffeinStatusMenuHandler.openMain(_:)), keyEquivalent: "")
-                openItem.target = coffeinStatusMenuHandler
-                menu.addItem(openItem)
-
-                menu.addItem(NSMenuItem.separator())
-
-                // Quick timer presets from the menu
-                let offItem = NSMenuItem(title: "Timer Off", action: #selector(CoffeinStatusMenuHandler.quickTimerOff(_:)), keyEquivalent: "")
-                offItem.target = coffeinStatusMenuHandler
-                menu.addItem(offItem)
-
-                let t30 = NSMenuItem(title: "30 min", action: #selector(CoffeinStatusMenuHandler.quickTimer30(_:)), keyEquivalent: "")
-                t30.target = coffeinStatusMenuHandler
-                menu.addItem(t30)
-
-                let t60 = NSMenuItem(title: "1 hour", action: #selector(CoffeinStatusMenuHandler.quickTimer60(_:)), keyEquivalent: "")
-                t60.target = coffeinStatusMenuHandler
-                menu.addItem(t60)
-
-                let t120 = NSMenuItem(title: "2 hours", action: #selector(CoffeinStatusMenuHandler.quickTimer120(_:)), keyEquivalent: "")
-                t120.target = coffeinStatusMenuHandler
-                menu.addItem(t120)
-
-                let t180 = NSMenuItem(title: "3 hours", action: #selector(CoffeinStatusMenuHandler.quickTimer180(_:)), keyEquivalent: "")
-                t180.target = coffeinStatusMenuHandler
-                menu.addItem(t180)
-
-                menu.addItem(NSMenuItem.separator())
-
-                // About + Quit
-                let aboutItem = NSMenuItem(title: "About Coffein", action: #selector(CoffeinStatusMenuHandler.openAbout(_:)), keyEquivalent: "")
-                aboutItem.target = coffeinStatusMenuHandler
-                menu.addItem(aboutItem)
-
-                let quitItem = NSMenuItem(title: "Quit Coffein", action: #selector(CoffeinStatusMenuHandler.quitApp(_:)), keyEquivalent: "q")
-                quitItem.target = coffeinStatusMenuHandler
-                menu.addItem(quitItem)
-
-                item.menu = menu
-                coffeinStatusItem = item
+            if storedSelectedDurationSeconds > 0 {
+                selectedDuration = TimeInterval(storedSelectedDurationSeconds)
+            } else {
+                selectedDuration = nil
+            }
+            
+            // Apply awake state to power assertions
+            if isAwake {
+                runCaffeinate()
+            } else {
+                stopCaffeinate()
             }
 
             // Sync current state to the status item (will hide it if not awake)
             updateCoffeinStatusItem(isAwake: isAwake, tooltip: statusTooltip)
+            
+            if selectedDuration != nil {
+                scheduleOffTimerIfNeeded()
+            }
 
             DispatchQueue.main.async {
                 if let window = NSApplication.shared.windows.first {
@@ -493,14 +450,9 @@ struct ContentView: View {
             customMinutes = storedCustomMinutes
             isTimerExpanded = storedIsTimerExpanded
 
-            // On app launch, always start with the timer OFF.
-            // We still restore the custom hours/minutes above so the user
-            // can quickly re-apply their preferred duration if desired,
-            // but we do not auto-reactivate a previous timer selection.
-            selectedDuration = nil
-            storedSelectedMinutes = 0
         }
         .onChange(of: isAwake) {
+            storedIsAwake = isAwake
             // Keep global flag and status item in sync
             coffeinIsAwakeFlag = isAwake
             updateCoffeinStatusItem(isAwake: isAwake, tooltip: statusTooltip)
@@ -508,8 +460,10 @@ struct ContentView: View {
         .onChange(of: selectedDuration) {
             if let duration = selectedDuration {
                 storedSelectedMinutes = Int(duration / 60)
+                storedSelectedDurationSeconds = Int(duration)
             } else {
                 storedSelectedMinutes = 0
+                storedSelectedDurationSeconds = 0
             }
             updateCoffeinStatusItem(isAwake: isAwake, tooltip: statusTooltip)
         }
@@ -568,13 +522,26 @@ struct ContentView: View {
                         .onHover { hoverClose = $0 }
                         .animation(.easeInOut(duration: 0.15), value: hoverClose)
                         .onTapGesture {
-                            if let window = mainWindow() {
-                                if isAwake {
-                                    // When Coffein is active, just minimize the window
-                                    window.miniaturize(nil)
-                                } else {
-                                    // When Coffein is idle, close the app completely
+                            guard let window = mainWindow() else { return }
+
+                            if isAwake {
+                                // Active: just minimize
+                                window.miniaturize(nil)
+                            } else {
+                                // Idle: ask before quitting; if cancelled, just hide the window
+                                let alert = NSAlert()
+                                alert.messageText = "Quit Coffein?"
+                                alert.informativeText = "Coffein is idle. Do you want to quit the app? You can also cancel to simply hide the window and keep the menu bar item."
+                                alert.alertStyle = .warning
+                                alert.addButton(withTitle: "Quit")
+                                alert.addButton(withTitle: "Cancel")
+
+                                let response = alert.runModal()
+                                if response == .alertFirstButtonReturn {
                                     NSApp.terminate(nil)
+                                } else {
+                                    // Cancel: hide the window (order out) to keep process/state alive
+                                    window.orderOut(nil)
                                 }
                             }
                         }
@@ -781,7 +748,9 @@ struct ContentView: View {
             // Small corner settings button on the card itself
             .overlay(alignment: .topTrailing) {
                 Button {
-                    withAnimation(.easeInOut(duration: 0.2)) {
+                    var t = Transaction()
+                    t.disablesAnimations = true
+                    withTransaction(t) {
                         isShowingSettings = true
                     }
                 } label: {
@@ -805,17 +774,16 @@ struct ContentView: View {
             // then apply the shadow so it follows the rounded shape instead of a rectangle.
             .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
 
-            // In-card settings overlay instead of a macOS sheet
             if isShowingSettings {
                 SettingsView(onClose: {
-                    // Only close the settings overlay, do not touch the main window
-                    withAnimation(.easeInOut(duration: 0.2)) {
+                    var t = Transaction()
+                    t.disablesAnimations = true
+                    withTransaction(t) {
                         isShowingSettings = false
                     }
                 })
                 .frame(width: 360)
                 .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-                .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
     }

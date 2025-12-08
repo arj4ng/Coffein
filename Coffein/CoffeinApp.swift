@@ -10,6 +10,7 @@ import AppKit
 
 class CoffeinAppDelegate: NSObject, NSApplicationDelegate {
     private var aboutWindow: NSWindow?
+    private var mainMenuRef: NSMenu?
 
     func application(_ application: NSApplication,
                      shouldSaveApplicationState coder: NSCoder) -> Bool {
@@ -61,6 +62,10 @@ class CoffeinAppDelegate: NSObject, NSApplicationDelegate {
         // Last-resort safety: if anything slipped through, stop caffeinate now
         print("[Coffein] applicationWillTerminate – final stopCaffeinate() call")
         stopCaffeinate()
+    }
+
+    func applicationWillBecomeActive(_ notification: Notification) {
+        // Do not set mainMenu here — SwiftUI may still override it during scene/window reattachment.
     }
 
     @objc func showAboutPanel(_ sender: Any?) {
@@ -133,12 +138,108 @@ class CoffeinAppDelegate: NSObject, NSApplicationDelegate {
         quitItem.target = NSApp
         appMenu.addItem(quitItem)
 
-        // Install as the app's main menu, replacing the default SwiftUI menus
-        NSApp.mainMenu = mainMenu
+        // Restore persisted awake state on launch instead of forcing defaults
+        let storedIsAwake = UserDefaults.standard.object(forKey: "coffein_isAwake") as? Bool ?? true
+        coffeinIsAwakeFlag = storedIsAwake
+        if storedIsAwake {
+            runCaffeinate()
+        } else {
+            stopCaffeinate()
+        }
 
-        // Start Coffein in active state and launch caffeinate once the app has finished launching.
-        coffeinIsAwakeFlag = true
-        runCaffeinate()
+        // Ensure status item is created once per process and reflects restored state
+        if coffeinStatusItem == nil {
+            let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+
+            if let button = item.button {
+                button.image = nil
+                button.title = ""
+                button.toolTip = "Coffein"
+            }
+
+            let menu = NSMenu()
+
+            // First line: current state/tooltip (disabled)
+            let initialTip = storedIsAwake ? "Coffein: Active – your Mac won't sleep" : "Coffein – idle (Mac can sleep normally)"
+            let stateItem = NSMenuItem(title: initialTip, action: nil, keyEquivalent: "")
+            stateItem.isEnabled = false
+            menu.addItem(stateItem)
+            menu.addItem(NSMenuItem.separator())
+
+            // Open main UI
+            let openItem = NSMenuItem(title: "Open Coffein", action: #selector(CoffeinStatusMenuHandler.openMain(_:)), keyEquivalent: "")
+            openItem.target = coffeinStatusMenuHandler
+            menu.addItem(openItem)
+
+            menu.addItem(NSMenuItem.separator())
+
+            // Quick timer presets from the menu
+            let offItem = NSMenuItem(title: "Timer Off", action: #selector(CoffeinStatusMenuHandler.quickTimerOff(_:)), keyEquivalent: "")
+            offItem.target = coffeinStatusMenuHandler
+            menu.addItem(offItem)
+
+            let t30 = NSMenuItem(title: "30 min", action: #selector(CoffeinStatusMenuHandler.quickTimer30(_:)), keyEquivalent: "")
+            t30.target = coffeinStatusMenuHandler
+            menu.addItem(t30)
+
+            let t60 = NSMenuItem(title: "1 hour", action: #selector(CoffeinStatusMenuHandler.quickTimer60(_:)), keyEquivalent: "")
+            t60.target = coffeinStatusMenuHandler
+            menu.addItem(t60)
+
+            let t120 = NSMenuItem(title: "2 hours", action: #selector(CoffeinStatusMenuHandler.quickTimer120(_:)), keyEquivalent: "")
+            t120.target = coffeinStatusMenuHandler
+            menu.addItem(t120)
+
+            let t180 = NSMenuItem(title: "3 hours", action: #selector(CoffeinStatusMenuHandler.quickTimer180(_:)), keyEquivalent: "")
+            t180.target = coffeinStatusMenuHandler
+            menu.addItem(t180)
+
+            menu.addItem(NSMenuItem.separator())
+
+            // About + Quit
+            let aboutItem = NSMenuItem(title: "About Coffein", action: #selector(CoffeinStatusMenuHandler.openAbout(_:)), keyEquivalent: "")
+            aboutItem.target = coffeinStatusMenuHandler
+            menu.addItem(aboutItem)
+
+            let quitItem = NSMenuItem(title: "Quit Coffein", action: #selector(CoffeinStatusMenuHandler.quitApp(_:)), keyEquivalent: "q")
+            quitItem.target = coffeinStatusMenuHandler
+            menu.addItem(quitItem)
+
+            item.menu = menu
+            coffeinStatusItem = item
+
+            // Ensure icon/tooltip reflect restored state
+            updateCoffeinStatusItem(isAwake: storedIsAwake)
+        }
+
+        self.mainMenuRef = mainMenu
+
+        // Install as the app's main menu, replacing the default SwiftUI menus
+        NSApp.mainMenu = self.mainMenuRef
+
+        print("[Coffein] applicationDidFinishLaunching – installed custom main menu")
+
+        // Keep the custom main menu authoritative whenever a window becomes key (e.g., after minimize → restore)
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.didBecomeKeyNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self, let menu = self.mainMenuRef else { return }
+            if NSApp.mainMenu !== menu {
+                NSApp.mainMenu = menu
+                print("[Coffein] didBecomeKey – reasserted custom main menu")
+            }
+        }
+    }
+
+    func applicationDidBecomeActive(_ notification: Notification) {
+        // Reassert the custom menu after SwiftUI finishes any scene/menu rebuild during restore.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let menu = self.mainMenuRef else { return }
+            NSApp.mainMenu = menu
+            print("[Coffein] applicationDidBecomeActive – reasserted custom main menu (post-activation)")
+        }
     }
 
 }
@@ -255,3 +356,4 @@ private struct AboutView: View {
         .frame(minWidth: 320, minHeight: 260)
     }
 }
+
