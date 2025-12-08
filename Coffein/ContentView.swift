@@ -118,68 +118,76 @@ fileprivate let minutesFormatter: NumberFormatter = {
     return f
 }()
 
-// MARK: - Global Caffeinate Handling
+// MARK: - Global Sleep Assertion Handling (IOKit, no caffeinate)
 
-fileprivate var caffeinateProcess: Process? = nil
+fileprivate final class CoffeinSleepManager {
+    static let shared = CoffeinSleepManager()
+
+    private var assertionID: IOPMAssertionID = 0
+    private(set) var isActive: Bool = false
+
+    private init() {}
+
+    func activate() {
+        guard !isActive else {
+            print("[Coffein] Sleep assertion already active")
+            return
+        }
+
+        let reason = "Coffein – prevent idle sleep" as CFString
+        let result = IOPMAssertionCreateWithName(
+            kIOPMAssertionTypeNoIdleSleep as CFString,
+            IOPMAssertionLevel(kIOPMAssertionLevelOn),
+            reason,
+            &assertionID
+        )
+
+        if result == kIOReturnSuccess {
+            isActive = true
+            print("[Coffein] Sleep assertion ON (id: \(assertionID))")
+        } else {
+            print("[Coffein] Failed to create sleep assertion, code: \(result)")
+        }
+    }
+
+    func deactivate() {
+        guard isActive else {
+            print("[Coffein] Sleep assertion already OFF")
+            return
+        }
+
+        let result = IOPMAssertionRelease(assertionID)
+        if result == kIOReturnSuccess {
+            print("[Coffein] Sleep assertion OFF")
+        } else {
+            print("[Coffein] Failed to release sleep assertion, code: \(result)")
+        }
+
+        assertionID = 0
+        isActive = false
+    }
+}
 
 func runCaffeinate() {
-    // Avoid spawning multiple caffeinate processes from repeated calls
-    if let proc = caffeinateProcess, proc.isRunning {
-        print("CAFFEINATE ALREADY RUNNING (pid: \(proc.processIdentifier))")
-        return
-    }
-
-    let task = Process()
-    task.executableURL = URL(fileURLWithPath: "/usr/bin/caffeinate")
-    task.arguments = ["-di"]
-
-    do {
-        try task.run()
-        caffeinateProcess = task
-        print("CAFFEINATE STARTED:", task.processIdentifier)
-    } catch {
-        print("FAILED TO START CAFFEINATE:", error)
-        caffeinateProcess = nil
-    }
+    CoffeinSleepManager.shared.activate()
 }
 
 func stopCaffeinate() {
-    // First try to terminate the tracked Process, if we still have it
-    if let proc = caffeinateProcess {
-        proc.terminate()
-        caffeinateProcess = nil
-        print("CAFFEINATE TERMINATED (tracked process)")
-    } else {
-        print("NO TRACKED CAFFEINATE PROCESS – attempting killall for safety")
-    }
-
-    // Extra safety: kill any remaining caffeinate processes owned by this user
-    let killTask = Process()
-    killTask.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
-    killTask.arguments = ["caffeinate"]
-
-    do {
-        try killTask.run()
-        killTask.waitUntilExit()
-        print("killall caffeinate exit status:", killTask.terminationStatus)
-    } catch {
-        // It's fine if there was nothing to kill; log for debugging
-        print("FAILED TO RUN killall caffeinate:", error)
-    }
+    CoffeinSleepManager.shared.deactivate()
 }
 
 func isCaffeinateRunning() -> Bool {
-    return caffeinateProcess != nil
+    return CoffeinSleepManager.shared.isActive
 }
 
 
 extension NSApplication {
     /// Called from the status item to bring Coffein to the front
     @objc func bringCoffeinToFront(_ sender: Any?) {
-        // Activate the app and bring the main window to the front
+        // Activate the app and bring the main window to the front without forcing key on a borderless window
         self.activate(ignoringOtherApps: true)
         if let window = self.windows.first {
-            window.makeKeyAndOrderFront(nil)
+            window.orderFront(nil)
         }
     }
 }
@@ -206,6 +214,7 @@ struct ContentView: View {
     @State private var hoverMin = false
     @State private var hoverZoom = false
 
+    @State private var isShowingSettings = false
     @State private var selectedDuration: TimeInterval? = nil
     @State private var customHours: Int = 0
     @State private var customMinutes: Int = 0
@@ -307,16 +316,14 @@ struct ContentView: View {
                 if let window = NSApplication.shared.windows.first {
                     window.titleVisibility = .hidden
                     window.titlebarAppearsTransparent = true
+
                     window.isOpaque = false
                     window.backgroundColor = .clear
-                    window.hasShadow = false
+                    window.hasShadow = false   // disable system shadow/border
 
-                    // Ensure content fills the full frame and the window is non-resizable
+                    // Use a normal titled window with full-size content so it can be key
                     var style = window.styleMask
-                    style.insert(.titled)
-                    style.insert(.fullSizeContentView)
-                    style.insert(.closable)
-                    style.insert(.miniaturizable)
+                    style.insert([.titled, .fullSizeContentView, .closable, .miniaturizable])
                     style.remove(.resizable)
                     window.styleMask = style
                     window.isMovableByWindowBackground = true
@@ -327,7 +334,6 @@ struct ContentView: View {
                         window.minSize = size
                     }
 
-                    // Hide native traffic lights
                     window.standardWindowButton(.closeButton)?.isHidden = true
                     window.standardWindowButton(.miniaturizeButton)?.isHidden = true
                     window.standardWindowButton(.zoomButton)?.isHidden = true
@@ -391,220 +397,245 @@ struct ContentView: View {
     // Extracted main card to make body simpler for the compiler
     @ViewBuilder
     private var mainCard: some View {
-        // Main card
-        VStack(spacing: 18) {
-
-            // Window controls inside the card
-            HStack(spacing: 8) {
-
-                // Close
-                Circle()
-                    .fill(hoverClose ? Color.red.opacity(1.0) : Color.red.opacity(0.75))
-                    .frame(width: 12, height: 12)
-                    .onHover { hoverClose = $0 }
-                    .animation(.easeInOut(duration: 0.15), value: hoverClose)
-                    .onTapGesture {
-                        if isAwake {
-                            // When Coffein is active, just minimize the window
-                            NSApp.keyWindow?.miniaturize(nil)
-                        } else {
-                            // When Coffein is idle, close the app completely
-                            NSApp.terminate(nil)
-                        }
-                    }
-
-                // Minimize
-                Circle()
-                    .fill(hoverMin ? Color.yellow.opacity(1.0) : Color.yellow.opacity(0.75))
-                    .frame(width: 12, height: 12)
-                    .onHover { hoverMin = $0 }
-                    .animation(.easeInOut(duration: 0.15), value: hoverMin)
-                    .onTapGesture { NSApp.keyWindow?.miniaturize(nil) }
-
-                // Zoom
-                Circle()
-                    .fill(hoverZoom ? Color.green.opacity(1.0) : Color.green.opacity(0.75))
-                    .frame(width: 12, height: 12)
-                    .onHover { hoverZoom = $0 }
-                    .animation(.easeInOut(duration: 0.15), value: hoverZoom)
-                    .onTapGesture { NSApp.keyWindow?.zoom(nil) }
-
-                Spacer()
-            }
-            .padding(.bottom, 2)
-            .opacity(0.92)
-
-            // Header row
-            HStack {
-                Image(systemName: isAwake ? "sun.max.fill" : "moon.zzz.fill")
-                    .symbolRenderingMode(.hierarchical)
-                    .font(.system(size: 22, weight: .medium))
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Coffein Shot")
-                        .font(.system(size: 18, weight: .semibold))
-                    Text("Stop your Mac from sleeping")
-                        .font(.system(size: 14, weight: .regular))
-                        .foregroundColor(colorScheme == .dark ? .secondary : .primary.opacity(0.7))
-                }
-
-                Spacer()
-
-                // Tiny status pill
-                HStack(spacing: 6) {
+        ZStack {
+            // Base rounded glass card
+            VStack(spacing: 18) {
+                // Window controls inside the card
+                HStack(spacing: 8) {
+                    // Close
                     Circle()
-                        .fill(isAwake ? Color.green : Color.gray)
-                        .frame(width: 8, height: 8)
-                    Text(isAwake ? "Active" : "Idle")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(colorScheme == .dark ? .primary : .primary)
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(
-                    Capsule()
-                        .fill(colorScheme == .dark
-                              ? Color.white.opacity(0.08)
-                              : Color.black.opacity(0.06))
-                )
-            }
-
-            // Power button
-            Button {
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.8, blendDuration: 0.2)) {
-                    isAwake.toggle()
-                }
-                if isAwake {
-                    runCaffeinate()
-                } else {
-                    stopCaffeinate()
-                }
-                scheduleOffTimerIfNeeded()
-            } label: {
-                ZStack {
-                    // Soft pulsing ring when active
-                    Circle()
-                        .stroke(
-                            RadialGradient(
-                                colors: isAwake
-                                    ? [Color.green.opacity(0.6), Color.green.opacity(0.0)]
-                                    : [Color.gray.opacity(0.4), Color.clear],
-                                center: .center,
-                                startRadius: 0,
-                                endRadius: 60
-                            ),
-                            lineWidth: 2
-                        )
-                        .frame(width: 84, height: 84)
-                        .opacity(isAwake ? 1 : 0.5)
-                        .scaleEffect(isAwake ? 1.05 : 1.0)
-                        .animation(
-                            isAwake
-                            ? .easeInOut(duration: 1.2).repeatForever(autoreverses: true)
-                            : .default,
-                            value: isAwake
-                        )
-
-                    // Main button fill: static when idle, liquid gradient when active
-                    Group {
-                        if isAwake {
-                            LiquidGradientCircle(timerIntensity: timerIntensity)
-                        } else {
-                            Circle()
-                                .fill(
-                                    LinearGradient(
-                                        colors: [Color.gray.opacity(0.45), Color.gray.opacity(0.25)],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
+                        .fill(hoverClose ? Color.red.opacity(1.0) : Color.red.opacity(0.75))
+                        .frame(width: 12, height: 12)
+                        .onHover { hoverClose = $0 }
+                        .animation(.easeInOut(duration: 0.15), value: hoverClose)
+                        .onTapGesture {
+                            if isAwake {
+                                // When Coffein is active, just minimize the window
+                                NSApp.keyWindow?.miniaturize(nil)
+                            } else {
+                                // When Coffein is idle, close the app completely
+                                NSApp.terminate(nil)
+                            }
                         }
-                    }
-                    .frame(width: 84, height: 84)
-                    .shadow(color: isAwake ? Color.green.opacity(0.7) : Color.black.opacity(0.6),
-                            radius: isAwake ? 18 : 10,
-                            x: 0, y: isAwake ? 10 : 6)
-                    .overlay(
-                        Circle()
-                            .stroke(Color.white.opacity(0.35), lineWidth: 1)
-                    )
 
-                    // Icon
-                    Image(systemName: isAwake ? "bolt.circle.fill" : "bolt.circle")
-                        .font(.system(size: 54, weight: .regular))
-                        .foregroundColor(.white)
+                    // Minimize
+                    Circle()
+                        .fill(hoverMin ? Color.yellow.opacity(1.0) : Color.yellow.opacity(0.75))
+                        .frame(width: 12, height: 12)
+                        .onHover { hoverMin = $0 }
+                        .animation(.easeInOut(duration: 0.15), value: hoverMin)
+                        .onTapGesture { NSApp.keyWindow?.miniaturize(nil) }
+
+                    // Zoom
+                    Circle()
+                        .fill(hoverZoom ? Color.green.opacity(1.0) : Color.green.opacity(0.75))
+                        .frame(width: 12, height: 12)
+                        .onHover { hoverZoom = $0 }
+                        .animation(.easeInOut(duration: 0.15), value: hoverZoom)
+                        .onTapGesture { NSApp.keyWindow?.zoom(nil) }
+
+                    Spacer()
                 }
-                .scaleEffect(isPressing ? 0.96 : 1.0)
-            }
-            .buttonStyle(.plain)
-            .pressEvents(onPress: { isPressing = true },
-                         onRelease: { isPressing = false })
+                .padding(.bottom, 2)
+                .opacity(0.92)
 
-            // Countdown display (only when a timer is active)
-            if let text = countdownDisplayText {
+                // Header row
                 HStack {
+                    Image(systemName: isAwake ? "sun.max.fill" : "moon.zzz.fill")
+                        .symbolRenderingMode(.hierarchical)
+                        .font(.system(size: 22, weight: .medium))
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Coffein Shot")
+                            .font(.system(size: 18, weight: .semibold))
+                        Text("Stop your Mac from sleeping")
+                            .font(.system(size: 14, weight: .regular))
+                            .foregroundColor(colorScheme == .dark ? .secondary : .primary.opacity(0.7))
+                    }
+
                     Spacer()
-                    Text(text)
-                        .font(.system(size: 16, weight: .medium, design: .monospaced))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .fill(Color.black.opacity(0.35))
-                        )
+
+                    // Tiny status pill
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(isAwake ? Color.green : Color.gray)
+                            .frame(width: 8, height: 8)
+                        Text(isAwake ? "Active" : "Idle")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(colorScheme == .dark ? .primary : .primary)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(
+                        Capsule()
+                            .fill(colorScheme == .dark
+                                  ? Color.white.opacity(0.08)
+                                  : Color.black.opacity(0.06))
+                    )
+                }
+
+                // Power button
+                Button {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8, blendDuration: 0.2)) {
+                        isAwake.toggle()
+                    }
+                    if isAwake {
+                        runCaffeinate()
+                    } else {
+                        stopCaffeinate()
+                    }
+                    scheduleOffTimerIfNeeded()
+                } label: {
+                    ZStack {
+                        // Soft pulsing ring when active
+                        Circle()
+                            .stroke(
+                                RadialGradient(
+                                    colors: isAwake
+                                        ? [Color.green.opacity(0.6), Color.green.opacity(0.0)]
+                                        : [Color.gray.opacity(0.4), Color.clear],
+                                    center: .center,
+                                    startRadius: 0,
+                                    endRadius: 60
+                                ),
+                                lineWidth: 2
+                            )
+                            .frame(width: 84, height: 84)
+                            .opacity(isAwake ? 1 : 0.5)
+                            .scaleEffect(isAwake ? 1.05 : 1.0)
+                            .animation(
+                                isAwake
+                                ? .easeInOut(duration: 1.2).repeatForever(autoreverses: true)
+                                : .default,
+                                value: isAwake
+                            )
+
+                        // Main button fill: static when idle, liquid gradient when active
+                        Group {
+                            if isAwake {
+                                LiquidGradientCircle(timerIntensity: timerIntensity)
+                            } else {
+                                Circle()
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [Color.gray.opacity(0.45), Color.gray.opacity(0.25)],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        )
+                                    )
+                            }
+                        }
+                        .frame(width: 84, height: 84)
+                        .shadow(color: isAwake ? Color.green.opacity(0.7) : Color.black.opacity(0.6),
+                                radius: isAwake ? 18 : 10,
+                                x: 0, y: isAwake ? 10 : 6)
                         .overlay(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .stroke(Color.white.opacity(0.25), lineWidth: 1)
+                            Circle()
+                                .stroke(Color.white.opacity(0.35), lineWidth: 1)
                         )
-                    Spacer()
+
+                        // Icon
+                        Image(systemName: isAwake ? "bolt.circle.fill" : "bolt.circle")
+                            .font(.system(size: 54, weight: .regular))
+                            .foregroundColor(.white)
+                    }
+                    .scaleEffect(isPressing ? 0.96 : 1.0)
                 }
+                .buttonStyle(.plain)
+                .pressEvents(onPress: { isPressing = true },
+                             onRelease: { isPressing = false })
+
+                // Countdown display (only when a timer is active)
+                if let text = countdownDisplayText {
+                    HStack {
+                        Spacer()
+                        Text(text)
+                            .font(.system(size: 16, weight: .medium, design: .monospaced))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .fill(Color.black.opacity(0.35))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .stroke(Color.white.opacity(0.25), lineWidth: 1)
+                            )
+                        Spacer()
+                    }
+                    .padding(.top, 4)
+                }
+
+                // Description
+                VStack(spacing: 4) {
+                    Text(isAwake ? "Your Mac won't sleep while activated" : "Your Mac can sleep normally")
+                        .font(.system(size: 16, weight: .medium))
+                    Text("Powered by native macOS power assertions to keep your Mac from dozing off.")
+                        .font(.system(size: 14))
+                        .foregroundColor(colorScheme == .dark ? .secondary : .primary.opacity(0.7))
+                        .multilineTextAlignment(.center)
+                }
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 4)
+
+                // Auto-off timer (collapsible)
+                autoOffSection
+
+                // Footer tag
+                Text("v1.0 · Made by arj4ng")
+                    .font(.system(size: 12, weight: .regular))
+                    .foregroundColor(colorScheme == .dark ? .secondary : .primary.opacity(0.65))
+                    .padding(.top, 6)
             }
-
-            // Description
-            VStack(spacing: 4) {
-                Text(isAwake ? "Your Mac won't sleep while activated" : "Your Mac can sleep normally")
-                    .font(.system(size: 16, weight: .medium))
-                Text("Powered by the built-in `caffeinate` command to keep your Mac from dozing off.")
-                    .font(.system(size: 14))
-                    .foregroundColor(colorScheme == .dark ? .secondary : .primary.opacity(0.7))
-                    .multilineTextAlignment(.center)
-            }
-            .fixedSize(horizontal: false, vertical: true)
-            .padding(.top, 4)
-
-            // Auto-off timer (collapsible)
-            autoOffSection
-
-            // Footer tag
-            Text("v1.0 · Made by arj4ng")
-                .font(.system(size: 12, weight: .regular))
-                .foregroundColor(colorScheme == .dark ? .secondary : .primary.opacity(0.65))
-                .padding(.top, 6)
-        }
-        .padding(.top, 24)
-        .padding(.horizontal, 24)
-        .padding(.bottom, 8)
-        .frame(width: 360)
-        .background(
-            ZStack {
-                // In light mode, put a bright white base *behind* the material
-                if colorScheme == .light {
+            .padding(.top, 24)
+            .padding(.horizontal, 24)
+            .padding(.bottom, 8)
+            .frame(width: 360)
+            .background(
+                ZStack {
+                    if colorScheme == .light {
+                        RoundedRectangle(cornerRadius: 24, style: .continuous)
+                            .fill(Color.white.opacity(0.9))
+                    }
                     RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .fill(Color.white.opacity(0.9))
+                        .fill(.ultraThinMaterial)
                 }
-                // Shared glassy material layer for both light and dark
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .fill(.ultraThinMaterial)
+            )
+            // Small corner settings button on the card itself
+            .overlay(alignment: .topTrailing) {
+                Button {
+                    isShowingSettings = true
+                } label: {
+                    Text("􀣌")
+                        .font(.system(size: 11, weight: .medium))
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 4)
+                        .background(
+                            Capsule().fill(
+                                colorScheme == .dark
+                                ? Color.white.opacity(0.10)
+                                : Color.black.opacity(0.08)
+                            )
+                        )
+                }
+                .buttonStyle(.plain)
+                .padding(.trailing, 14)
+                .padding(.top, 12)
             }
-        )
-        .overlay(
-            // Only a subtle border on top – no white overlay over the content
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(Color.white.opacity(0.15), lineWidth: 1)
-        )
-        .shadow(color: Color.black.opacity(0.6), radius: 24, x: 0, y: 18)
+            .shadow(color: Color.black.opacity(0.6), radius: 24, x: 0, y: 18)
+
+            // In-card settings overlay instead of a macOS sheet
+            if isShowingSettings {
+                SettingsView(onClose: {
+                    // Only close the settings overlay, do not touch the main window
+                    isShowingSettings = false
+                })
+                .frame(width: 360)
+                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+            }
+        }
         .animation(.easeInOut(duration: 0.22), value: isAwake)
+        .animation(.easeInOut(duration: 0.2), value: isShowingSettings)
     }
 
     // Extracted auto-off section to keep mainCard smaller

@@ -46,6 +46,7 @@
 			isa = PBXGroup;
 			children = (
 				96E7F8DD2EE4BE36004AE15C /* Coffein */,
+				96F2B8062EE5636900E39D93 /* Frameworks */,
 				96E7F8DC2EE4BE36004AE15C /* Products */,
 			);
 			sourceTree = "<group>";
@@ -56,6 +57,13 @@
 				96E7F8DB2EE4BE36004AE15C /* Coffein.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		96F2B8062EE5636900E39D93 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
