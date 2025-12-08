@@ -11,6 +11,20 @@ import AppKit
 class CoffeinAppDelegate: NSObject, NSApplicationDelegate {
     private var aboutWindow: NSWindow?
 
+    func application(_ application: NSApplication,
+                     shouldSaveApplicationState coder: NSCoder) -> Bool {
+        return false
+    }
+
+    func application(_ application: NSApplication,
+                     shouldRestoreApplicationState coder: NSCoder) -> Bool {
+        return false
+    }
+
+    func applicationShouldRestoreWindows(_ sender: NSApplication) -> Bool {
+        return false
+    }
+
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         // Debug: see when this is actually called
         print("[Coffein] applicationShouldTerminate called. coffeinIsAwakeFlag =", coffeinIsAwakeFlag)
@@ -66,6 +80,7 @@ class CoffeinAppDelegate: NSObject, NSApplicationDelegate {
             defer: false
         )
         window.title = "About Coffein"
+        window.isRestorable = false
         window.isReleasedWhenClosed = false
         window.level = .floating
         window.contentViewController = hostingController
@@ -174,7 +189,7 @@ private struct AboutView: View {
                     Image(nsImage: icon)
                         .resizable()
                         .aspectRatio(contentMode: .fit)
-                        .frame(width: 56, height: 80)
+                        .frame(width: 56, height: 100)
                         .cornerRadius(12)
                         .shadow(radius: 8, y: 4)
                 }
