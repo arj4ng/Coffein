@@ -13,6 +13,13 @@ struct SettingsView: View {
     /// Provided by ContentView so the settings overlay can dismiss itself
     let onClose: () -> Void
     
+    @State private var selectedMode: CoffeinSleepMode
+    
+    init(onClose: @escaping () -> Void) {
+        self.onClose = onClose
+        _selectedMode = State(initialValue: CoffeinSleepManager.shared.mode)
+    }
+    
     var body: some View {
         ZStack {
             // Glass / card background – liquid style
@@ -146,9 +153,62 @@ struct SettingsView: View {
                         )
                 )
 
+                // MARK: Power / Sleep Behaviour section label
+                Text("Power")
+                    .font(.system(size: 11, weight: .semibold))
+                    .textCase(.uppercase)
+                    .foregroundColor(.secondary)
+                    .padding(.top, 4)
+
+                // MARK: Power section card
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(alignment: .center, spacing: 10) {
+                        Image(systemName: "bolt.fill")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.secondary)
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Keep-awake behavior")
+                                .font(.system(size: 13, weight: .medium))
+
+                            Text("Choose how Coffein keeps your Mac awake.")
+                                .font(.system(size: 11))
+                                .foregroundColor(.secondary)
+                        }
+
+                        Spacer()
+
+                        Picker("", selection: $selectedMode) {
+                            ForEach(CoffeinSleepMode.allCases, id: \.self) { mode in
+                                Text(mode.displayName).tag(mode)
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        .frame(width: 170)
+                    }
+
+                    Text(selectedMode.modeDescription)
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(12)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(
+                            colorScheme == .dark
+                            ? Color.white.opacity(0.05)
+                            : Color.black.opacity(0.03)
+                        )
+                )
+                
                 Spacer(minLength: 0)
             }
             .padding(20)
+            .onChange(of: selectedMode) { _, newMode in
+                CoffeinSleepManager.shared.configure(mode: newMode)
+            }
         }
     }
 }

@@ -120,51 +120,170 @@ fileprivate let minutesFormatter: NumberFormatter = {
 
 // MARK: - Global Sleep Assertion Handling (IOKit, no caffeinate)
 
-fileprivate final class CoffeinSleepManager {
+enum CoffeinSleepMode: String, CaseIterable {
+    /// Match classic `caffeinate -di`: prevent idle sleep and keep the display on.
+    case systemAndDisplay
+
+    /// Prepared for later: prevent system idle sleep but allow normal display sleep.
+    case systemOnly
+
+    /// Prepared for later: keep the display on, without explicitly blocking idle sleep.
+    case displayOnly
+
+    var displayName: String {
+        switch self {
+        case .systemAndDisplay:
+            return "System + Display"
+        case .systemOnly:
+            return "System only"
+        case .displayOnly:
+            return "Display only"
+        }
+    }
+
+    var modeDescription: String {
+        switch self {
+        case .systemAndDisplay:
+            return "Prevents both your Mac and its display from sleeping while Coffein is active."
+        case .systemOnly:
+            return "Prevents your Mac from going to sleep, but allows the display to turn off normally."
+        case .displayOnly:
+            return "Keeps the display on while Coffein is active; system sleep follows macOS settings."
+        }
+    }
+}
+
+final class CoffeinSleepManager {
     static let shared = CoffeinSleepManager()
 
-    private var assertionID: IOPMAssertionID = 0
+    private var idleAssertionID: IOPMAssertionID = 0
+    private var displayAssertionID: IOPMAssertionID = 0
+
     private(set) var isActive: Bool = false
+
+    /// Default behavior: match classic `caffeinate -di`
+    private(set) var mode: CoffeinSleepMode = .systemAndDisplay
 
     private init() {}
 
+    /// Prepared hook for future settings: change how Coffein keeps the Mac awake.
+    func configure(mode: CoffeinSleepMode) {
+        let wasActive = isActive
+        if wasActive {
+            deactivateInternal()
+        }
+        self.mode = mode
+        if wasActive {
+            activate()
+        }
+    }
+
     func activate() {
         guard !isActive else {
-            print("[Coffein] Sleep assertion already active")
+            print("[Coffein] Sleep assertions already active (mode: \(mode.rawValue))")
             return
         }
 
-        let reason = "Coffein – prevent idle sleep" as CFString
-        let result = IOPMAssertionCreateWithName(
-            kIOPMAssertionTypeNoIdleSleep as CFString,
-            IOPMAssertionLevel(kIOPMAssertionLevelOn),
-            reason,
-            &assertionID
-        )
+        let reason = "Coffein – prevent sleep (\(mode.rawValue))" as CFString
 
-        if result == kIOReturnSuccess {
-            isActive = true
-            print("[Coffein] Sleep assertion ON (id: \(assertionID))")
+        var createdIdle = false
+        var createdDisplay = false
+
+        switch mode {
+        case .systemAndDisplay:
+            // Match `caffeinate -di`: keep display on AND block idle sleep explicitly.
+            let resDisplay = IOPMAssertionCreateWithName(
+                kIOPMAssertionTypeNoDisplaySleep as CFString,
+                IOPMAssertionLevel(kIOPMAssertionLevelOn),
+                reason,
+                &displayAssertionID
+            )
+            if resDisplay == kIOReturnSuccess {
+                createdDisplay = true
+            } else {
+                displayAssertionID = 0
+                print("[Coffein] Failed to create NoDisplaySleep assertion, code: \(resDisplay)")
+            }
+
+            let resIdle = IOPMAssertionCreateWithName(
+                kIOPMAssertionTypeNoIdleSleep as CFString,
+                IOPMAssertionLevel(kIOPMAssertionLevelOn),
+                reason,
+                &idleAssertionID
+            )
+            if resIdle == kIOReturnSuccess {
+                createdIdle = true
+            } else {
+                idleAssertionID = 0
+                print("[Coffein] Failed to create NoIdleSleep assertion, code: \(resIdle)")
+            }
+
+        case .systemOnly:
+            // Prevent system idle sleep, allow display to follow user settings.
+            let resIdle = IOPMAssertionCreateWithName(
+                kIOPMAssertionTypeNoIdleSleep as CFString,
+                IOPMAssertionLevel(kIOPMAssertionLevelOn),
+                reason,
+                &idleAssertionID
+            )
+            if resIdle == kIOReturnSuccess {
+                createdIdle = true
+            } else {
+                idleAssertionID = 0
+                print("[Coffein] Failed to create NoIdleSleep assertion, code: \(resIdle)")
+            }
+
+        case .displayOnly:
+            // Keep the display on; system idle behavior left to macOS.
+            let resDisplay = IOPMAssertionCreateWithName(
+                kIOPMAssertionTypeNoDisplaySleep as CFString,
+                IOPMAssertionLevel(kIOPMAssertionLevelOn),
+                reason,
+                &displayAssertionID
+            )
+            if resDisplay == kIOReturnSuccess {
+                createdDisplay = true
+            } else {
+                displayAssertionID = 0
+                print("[Coffein] Failed to create NoDisplaySleep assertion, code: \(resDisplay)")
+            }
+        }
+
+        isActive = createdIdle || createdDisplay
+        if isActive {
+            print("[Coffein] Sleep assertions ON (mode: \(mode.rawValue))")
         } else {
-            print("[Coffein] Failed to create sleep assertion, code: \(result)")
+            print("[Coffein] Failed to create any sleep assertion (mode: \(mode.rawValue))")
         }
     }
 
     func deactivate() {
         guard isActive else {
-            print("[Coffein] Sleep assertion already OFF")
+            print("[Coffein] Sleep assertions already OFF")
             return
         }
 
-        let result = IOPMAssertionRelease(assertionID)
-        if result == kIOReturnSuccess {
-            print("[Coffein] Sleep assertion OFF")
-        } else {
-            print("[Coffein] Failed to release sleep assertion, code: \(result)")
+        deactivateInternal()
+        isActive = false
+        print("[Coffein] Sleep assertions OFF")
+    }
+
+    private func deactivateInternal() {
+        if idleAssertionID != 0 {
+            let res = IOPMAssertionRelease(idleAssertionID)
+            if res != kIOReturnSuccess {
+                print("[Coffein] Failed to release NoIdleSleep assertion, code: \(res)")
+            }
+            idleAssertionID = 0
         }
 
-        assertionID = 0
-        isActive = false
+        if displayAssertionID != 0 {
+            let res = IOPMAssertionRelease(displayAssertionID)
+            if res != kIOReturnSuccess {
+                print("[Coffein] Failed to release NoDisplaySleep assertion, code: \(res)")
+            }
+            displayAssertionID = 0
+        }
     }
 }
 
@@ -345,11 +464,12 @@ struct ContentView: View {
             customMinutes = storedCustomMinutes
             isTimerExpanded = storedIsTimerExpanded
 
-            if storedSelectedMinutes > 0 {
-                selectedDuration = TimeInterval(storedSelectedMinutes * 60)
-            } else {
-                selectedDuration = nil
-            }
+            // On app launch, always start with the timer OFF.
+            // We still restore the custom hours/minutes above so the user
+            // can quickly re-apply their preferred duration if desired,
+            // but we do not auto-reactivate a previous timer selection.
+            selectedDuration = nil
+            storedSelectedMinutes = 0
         }
         .onChange(of: isAwake) {
             // Keep global flag and status item in sync
