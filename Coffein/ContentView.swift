@@ -22,7 +22,6 @@
 
 import SwiftUI
 import AppKit
-import IOKit.pwr_mgt
 
 private let cardCornerRadius: CGFloat = 24
 
@@ -39,6 +38,49 @@ private func coffeinGlassBackground(colorScheme: ColorScheme) -> some View {
     }
 }
 
+/// Shared liquid glass border used by cards/windows
+@ViewBuilder
+private func coffeinLiquidGlassBorder(colorScheme: ColorScheme) -> some View {
+    let outer = RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
+    ZStack {
+        // Soft inner highlight
+        outer
+            .stroke(Color.white.opacity(colorScheme == .dark ? 0.18 : 0.28), lineWidth: 1)
+            .blendMode(.plusLighter)
+        // Subtle chroma pass to simulate liquid edge
+        outer
+            .stroke(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.35),
+                        Color.white.opacity(0.10),
+                        Color.white.opacity(0.28)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                lineWidth: 0.8
+            )
+            .opacity(colorScheme == .dark ? 0.45 : 0.55)
+        // Ambient rim glow
+        outer
+            .stroke(
+                RadialGradient(
+                    colors: [
+                        (colorScheme == .dark ? Color.white.opacity(0.18) : Color.black.opacity(0.12)),
+                        .clear
+                    ],
+                    center: .center,
+                    startRadius: 0,
+                    endRadius: 220
+                ),
+                lineWidth: 1
+            )
+            .blur(radius: 0.6)
+            .opacity(0.6)
+    }
+}
+
 
 extension Notification.Name {
     static let coffeinForceStop        = Notification.Name("coffeinForceStop")
@@ -47,9 +89,6 @@ extension Notification.Name {
 
 // Global menu bar status item for Coffein
 var coffeinStatusItem: NSStatusItem?
-
-// Global flag so the app delegate knows if Coffein is actively preventing sleep
-var coffeinIsAwakeFlag: Bool = false
 
 // Helper object to handle status item menu actions
 class CoffeinStatusMenuHandler: NSObject {
@@ -133,188 +172,6 @@ fileprivate let minutesFormatter: NumberFormatter = {
     return f
 }()
 
-// MARK: - Global Sleep Assertion Handling (IOKit, no caffeinate)
-
-enum CoffeinSleepMode: String, CaseIterable {
-    /// Match classic `caffeinate -di`: prevent idle sleep and keep the display on.
-    case systemAndDisplay
-
-    /// Prepared for later: prevent system idle sleep but allow normal display sleep.
-    case systemOnly
-
-    /// Prepared for later: keep the display on, without explicitly blocking idle sleep.
-    case displayOnly
-
-    var displayName: String {
-        switch self {
-        case .systemAndDisplay:
-            return "System + Display"
-        case .systemOnly:
-            return "System only"
-        case .displayOnly:
-            return "Display only"
-        }
-    }
-
-    var modeDescription: String {
-        switch self {
-        case .systemAndDisplay:
-            return "Prevents both your Mac and its display from sleeping while Coffein is active"
-        case .systemOnly:
-            return "Prevents your Mac from going to sleep, but allows the display to turn off normally"
-        case .displayOnly:
-            return "Keeps the display on while Coffein is active; system sleep follows macOS settings"
-        }
-    }
-}
-
-final class CoffeinSleepManager {
-    static let shared = CoffeinSleepManager()
-
-    private var idleAssertionID: IOPMAssertionID = 0
-    private var displayAssertionID: IOPMAssertionID = 0
-
-    private(set) var isActive: Bool = false
-
-    /// Default behavior: match classic `caffeinate -di`
-    private(set) var mode: CoffeinSleepMode = .systemAndDisplay
-
-    private init() {}
-
-    /// Prepared hook for future settings: change how Coffein keeps the Mac awake.
-    func configure(mode: CoffeinSleepMode) {
-        let wasActive = isActive
-        if wasActive {
-            deactivateInternal()
-        }
-        self.mode = mode
-        if wasActive {
-            activate()
-        }
-    }
-
-    func activate() {
-        guard !isActive else {
-            print("[Coffein] Sleep assertions already active (mode: \(mode.rawValue))")
-            return
-        }
-
-        let reason = "Coffein – prevent sleep (\(mode.rawValue))" as CFString
-
-        var createdIdle = false
-        var createdDisplay = false
-
-        switch mode {
-        case .systemAndDisplay:
-            // Match `caffeinate -di`: keep display on AND block idle sleep explicitly.
-            let resDisplay = IOPMAssertionCreateWithName(
-                kIOPMAssertionTypeNoDisplaySleep as CFString,
-                IOPMAssertionLevel(kIOPMAssertionLevelOn),
-                reason,
-                &displayAssertionID
-            )
-            if resDisplay == kIOReturnSuccess {
-                createdDisplay = true
-            } else {
-                displayAssertionID = 0
-                print("[Coffein] Failed to create NoDisplaySleep assertion, code: \(resDisplay)")
-            }
-
-            let resIdle = IOPMAssertionCreateWithName(
-                kIOPMAssertionTypeNoIdleSleep as CFString,
-                IOPMAssertionLevel(kIOPMAssertionLevelOn),
-                reason,
-                &idleAssertionID
-            )
-            if resIdle == kIOReturnSuccess {
-                createdIdle = true
-            } else {
-                idleAssertionID = 0
-                print("[Coffein] Failed to create NoIdleSleep assertion, code: \(resIdle)")
-            }
-
-        case .systemOnly:
-            // Prevent system idle sleep, allow display to follow user settings.
-            let resIdle = IOPMAssertionCreateWithName(
-                kIOPMAssertionTypeNoIdleSleep as CFString,
-                IOPMAssertionLevel(kIOPMAssertionLevelOn),
-                reason,
-                &idleAssertionID
-            )
-            if resIdle == kIOReturnSuccess {
-                createdIdle = true
-            } else {
-                idleAssertionID = 0
-                print("[Coffein] Failed to create NoIdleSleep assertion, code: \(resIdle)")
-            }
-
-        case .displayOnly:
-            // Keep the display on; system idle behavior left to macOS.
-            let resDisplay = IOPMAssertionCreateWithName(
-                kIOPMAssertionTypeNoDisplaySleep as CFString,
-                IOPMAssertionLevel(kIOPMAssertionLevelOn),
-                reason,
-                &displayAssertionID
-            )
-            if resDisplay == kIOReturnSuccess {
-                createdDisplay = true
-            } else {
-                displayAssertionID = 0
-                print("[Coffein] Failed to create NoDisplaySleep assertion, code: \(resDisplay)")
-            }
-        }
-
-        isActive = createdIdle || createdDisplay
-        if isActive {
-            print("[Coffein] Sleep assertions ON (mode: \(mode.rawValue))")
-        } else {
-            print("[Coffein] Failed to create any sleep assertion (mode: \(mode.rawValue))")
-        }
-    }
-
-    func deactivate() {
-        guard isActive else {
-            print("[Coffein] Sleep assertions already OFF")
-            return
-        }
-
-        deactivateInternal()
-        isActive = false
-        print("[Coffein] Sleep assertions OFF")
-    }
-
-    private func deactivateInternal() {
-        if idleAssertionID != 0 {
-            let res = IOPMAssertionRelease(idleAssertionID)
-            if res != kIOReturnSuccess {
-                print("[Coffein] Failed to release NoIdleSleep assertion, code: \(res)")
-            }
-            idleAssertionID = 0
-        }
-
-        if displayAssertionID != 0 {
-            let res = IOPMAssertionRelease(displayAssertionID)
-            if res != kIOReturnSuccess {
-                print("[Coffein] Failed to release NoDisplaySleep assertion, code: \(res)")
-            }
-            displayAssertionID = 0
-        }
-    }
-}
-
-func runCaffeinate() {
-    CoffeinSleepManager.shared.activate()
-}
-
-func stopCaffeinate() {
-    CoffeinSleepManager.shared.deactivate()
-}
-
-func isCaffeinateRunning() -> Bool {
-    return CoffeinSleepManager.shared.isActive
-}
-
-
 extension NSApplication {
     /// Called from the status item to bring Coffein to the front
     @objc func bringCoffeinToFront(_ sender: Any?) {
@@ -365,32 +222,23 @@ struct ContentView: View {
         }
     }
     @Environment(\.colorScheme) private var colorScheme
-    @State private var isAwake = false
+    @StateObject private var coffeinManager = CoffeinManager()
+    
     @State private var isPressing = false
     @State private var hoverClose = false
     @State private var hoverMin = false
     @State private var hoverZoom = false
 
     @State private var isShowingSettings = false
-    @State private var selectedDuration: TimeInterval? = nil
     @State private var customHours: Int = 0
     @State private var customMinutes: Int = 0
-    @State private var offTimer: Timer? = nil
-    @State private var countdownTimer: Timer? = nil
-    @State private var remainingSeconds: Int? = nil
+    
     @State private var isTimerExpanded: Bool = false
 
     // Persist small preferences between launches
     @AppStorage("coffein_timerEndActionRaw") private var timerEndActionRaw: String = TimerEndAction.deactivate.rawValue
-    @AppStorage("coffein_selectedMinutes")   private var storedSelectedMinutes: Int = 0
-    @AppStorage("coffein_customHours")       private var storedCustomHours: Int = 0
-    @AppStorage("coffein_customMinutes")     private var storedCustomMinutes: Int = 0
     @AppStorage("coffein_isTimerExpanded")   private var storedIsTimerExpanded: Bool = false
     
-    // Persist core state across launches
-    @AppStorage("coffein_isAwake") private var storedIsAwake: Bool = true
-    @AppStorage("coffein_selectedDurationSeconds") private var storedSelectedDurationSeconds: Int = 0
-
     @AppStorage("coffein_theme_mode") private var themeModeRaw: String = CoffeinThemeMode.system.rawValue
 
     /// The color scheme Coffein should use, based on the selected theme mode.
@@ -416,44 +264,17 @@ struct ContentView: View {
         // "ghost" area above the card where the default window chrome would be.
         .ignoresSafeArea(edges: .top)
         .onAppear {
-            // Restore persisted awake state and selected duration
-            isAwake = storedIsAwake
-            coffeinIsAwakeFlag = isAwake
-
-            if storedSelectedDurationSeconds > 0 {
-                selectedDuration = TimeInterval(storedSelectedDurationSeconds)
-            } else {
-                selectedDuration = nil
-            }
-            
-            // Apply awake state to power assertions
-            if isAwake {
-                runCaffeinate()
-            } else {
-                stopCaffeinate()
-            }
-
-            // Sync current state to the status item (will hide it if not awake)
-            updateCoffeinStatusItem(isAwake: isAwake, tooltip: statusTooltip)
-            
-            if selectedDuration != nil {
-                scheduleOffTimerIfNeeded()
-            }
+            // Sync current state to the status item
+            updateCoffeinStatusItem(isAwake: coffeinManager.isAwake, tooltip: statusTooltip)
 
             DispatchQueue.main.async {
                 if let window = NSApplication.shared.windows.first {
                     window.titleVisibility = .hidden
                     window.titlebarAppearsTransparent = true
-
                     window.isOpaque = false
                     window.backgroundColor = .clear
                     window.hasShadow = false
-
-                    // Let SwiftUI / AppKit manage resizability and style;
-                    // we only make the window movable by background and hide
-                    // the native traffic lights so our custom ones are used.
                     window.isMovableByWindowBackground = true
-
                     window.standardWindowButton(.closeButton)?.isHidden = true
                     window.standardWindowButton(.miniaturizeButton)?.isHidden = true
                     window.standardWindowButton(.zoomButton)?.isHidden = true
@@ -461,57 +282,41 @@ struct ContentView: View {
             }
 
             // Restore simple preferences from storage
-            customHours = storedCustomHours
-            customMinutes = storedCustomMinutes
             isTimerExpanded = storedIsTimerExpanded
+        }
+        .onChange(of: coffeinManager.isAwake) {
+            updateCoffeinStatusItem(isAwake: coffeinManager.isAwake, tooltip: statusTooltip)
 
-        }
-        .onChange(of: isAwake) {
-            storedIsAwake = isAwake
-            // Keep global flag and status item in sync
-            coffeinIsAwakeFlag = isAwake
-            updateCoffeinStatusItem(isAwake: isAwake, tooltip: statusTooltip)
-        }
-        .onChange(of: selectedDuration) {
-            if let duration = selectedDuration {
-                storedSelectedMinutes = Int(duration / 60)
-                storedSelectedDurationSeconds = Int(duration)
+            // If Coffein is turned off manually, any active timer should be paused.
+            if !coffeinManager.isAwake {
+                if coffeinManager.timer != nil {
+                    coffeinManager.pauseTimer()
+                }
             } else {
-                storedSelectedMinutes = 0
-                storedSelectedDurationSeconds = 0
+                // If turned back on, resume timer if it was paused
+                if coffeinManager.timeRemaining > 0 {
+                    coffeinManager.resumeTimer()
+                }
             }
-            updateCoffeinStatusItem(isAwake: isAwake, tooltip: statusTooltip)
         }
         .onChange(of: isTimerExpanded) {
-            // Persist expansion state only; let SwiftUI manage content size.
             storedIsTimerExpanded = isTimerExpanded
         }
-        .onChange(of: isShowingSettings) {
-            // No manual window resize here; keep behavior simple and stable.
+        .onChange(of: coffeinManager.timeRemaining, initial: false) {
+            updateCoffeinStatusItem(isAwake: coffeinManager.isAwake, tooltip: statusTooltip)
         }
-        .onChange(of: remainingSeconds, initial: false) {
-            updateCoffeinStatusItem(isAwake: isAwake, tooltip: statusTooltip)
+        .onChange(of: coffeinManager.sleepMode) {
+            coffeinManager.sleepModeChanged()
         }
         .onReceive(NotificationCenter.default.publisher(for: .coffeinQuickTimerPreset)) { note in
             guard let seconds = note.object as? TimeInterval else { return }
 
-            // Clear existing timers
-            offTimer?.invalidate()
-            offTimer = nil
-            countdownTimer?.invalidate()
-            countdownTimer = nil
-            remainingSeconds = nil
-
             if seconds <= 0 {
-                // Timer Off via menu
-                selectedDuration = nil
+                // "Timer Off" was selected from the menu
+                coffeinManager.stopTimer()
             } else {
-                selectedDuration = seconds
-                if !isAwake {
-                    isAwake = true
-                    runCaffeinate()
-                }
-                scheduleOffTimerIfNeeded()
+                // A preset was selected from the menu
+                coffeinManager.startTimer(duration: seconds)
             }
         }
     }
@@ -539,7 +344,7 @@ struct ContentView: View {
                         .onTapGesture {
                             guard let window = mainWindow() else { return }
 
-                            if isAwake {
+                            if coffeinManager.isAwake {
                                 // Active: just minimize
                                 window.miniaturize(nil)
                             } else {
@@ -600,7 +405,7 @@ struct ContentView: View {
 
                 // Header row
                 HStack {
-                    Image(systemName: isAwake ? "sun.max.fill" : "moon.zzz.fill")
+                    Image(systemName: coffeinManager.isAwake ? "sun.max.fill" : "moon.zzz.fill")
                         .symbolRenderingMode(.hierarchical)
                         .font(.system(size: 22, weight: .medium))
 
@@ -617,9 +422,9 @@ struct ContentView: View {
                     // Tiny status pill
                     HStack(spacing: 6) {
                         Circle()
-                            .fill(isAwake ? Color.green : Color.gray)
+                            .fill(coffeinManager.isAwake ? Color.green : Color.gray)
                             .frame(width: 8, height: 8)
-                        Text(isAwake ? "Active" : "Idle")
+                        Text(coffeinManager.isAwake ? "Active" : "Idle")
                             .font(.system(size: 12, weight: .medium))
                             .foregroundColor(colorScheme == .dark ? .primary : .primary)
                     }
@@ -636,21 +441,15 @@ struct ContentView: View {
                 // Power button
                 Button {
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.8, blendDuration: 0.2)) {
-                        isAwake.toggle()
+                        coffeinManager.toggleAwake()
                     }
-                    if isAwake {
-                        runCaffeinate()
-                    } else {
-                        stopCaffeinate()
-                    }
-                    scheduleOffTimerIfNeeded()
                 } label: {
                     ZStack {
                         // Soft pulsing ring when active
                         Circle()
                             .stroke(
                                 RadialGradient(
-                                    colors: isAwake
+                                    colors: coffeinManager.isAwake
                                         ? [Color.green.opacity(0.6), Color.green.opacity(0.0)]
                                         : [Color.gray.opacity(0.4), Color.clear],
                                     center: .center,
@@ -660,18 +459,18 @@ struct ContentView: View {
                                 lineWidth: 2
                             )
                             .frame(width: 84, height: 84)
-                            .opacity(isAwake ? 1 : 0.5)
-                            .scaleEffect(isAwake ? 1.05 : 1.0)
+                            .opacity(coffeinManager.isAwake ? 1 : 0.5)
+                            .scaleEffect(coffeinManager.isAwake ? 1.05 : 1.0)
                             .animation(
-                                isAwake
+                                coffeinManager.isAwake
                                 ? .easeInOut(duration: 1.2).repeatForever(autoreverses: true)
                                 : .default,
-                                value: isAwake
+                                value: coffeinManager.isAwake
                             )
 
                         // Main button fill: static when idle, liquid gradient when active
                         Group {
-                            if isAwake {
+                            if coffeinManager.isAwake {
                                 LiquidGradientCircle(timerIntensity: timerIntensity)
                             } else {
                                 Circle()
@@ -685,16 +484,16 @@ struct ContentView: View {
                             }
                         }
                         .frame(width: 84, height: 84)
-                        .shadow(color: isAwake ? Color.green.opacity(0.7) : Color.black.opacity(0.6),
-                                radius: isAwake ? 18 : 10,
-                                x: 0, y: isAwake ? 10 : 6)
+                        .shadow(color: coffeinManager.isAwake ? Color.green.opacity(0.7) : Color.black.opacity(0.6),
+                                radius: coffeinManager.isAwake ? 18 : 10,
+                                x: 0, y: coffeinManager.isAwake ? 10 : 6)
                         .overlay(
                             Circle()
                                 .stroke(Color.white.opacity(0.35), lineWidth: 1)
                         )
 
                         // Icon
-                        Image(systemName: isAwake ? "bolt.circle.fill" : "bolt.circle")
+                        Image(systemName: coffeinManager.isAwake ? "bolt.circle.fill" : "bolt.circle")
                             .font(.system(size: 54, weight: .regular))
                             .foregroundColor(.white)
                     }
@@ -727,7 +526,7 @@ struct ContentView: View {
 
                 // Description
                 VStack(spacing: 4) {
-                    Text(isAwake ? "Your Mac won't sleep while activated" : "Your Mac can sleep normally")
+                    Text(coffeinManager.isAwake ? "Your Mac won't sleep while activated" : "Your Mac can sleep normally")
                         .font(.system(size: 16, weight: .medium))
                     Text("Powered by native macOS power assertions to keep your Mac from dozing off.")
                         .font(.system(size: 14))
@@ -781,6 +580,9 @@ struct ContentView: View {
             // Clip the entire card (content + background + overlay) to rounded corners,
             // then apply the shadow so it follows the rounded shape instead of a rectangle.
             .clipShape(RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous))
+            .overlay(
+                coffeinLiquidGlassBorder(colorScheme: colorScheme)
+            )
 
             if isShowingSettings {
                 SettingsView(onClose: {
@@ -790,6 +592,7 @@ struct ContentView: View {
                         isShowingSettings = false
                     }
                 })
+                .environmentObject(coffeinManager)
                 .frame(width: 360)
                 .background(
                     coffeinGlassBackground(colorScheme: colorScheme)
@@ -811,7 +614,7 @@ struct ContentView: View {
                     Text("􀐱 Auto turn off")
                         .font(.system(size: 14, weight: .medium))
                     Spacer()
-                    Text(selectedDuration == nil ? "Off" : timerSummaryText)
+                    Text(coffeinManager.timer == nil ? "Off" : timerSummaryText)
                         .font(.system(size: 14))
                         .foregroundColor(colorScheme == .dark ? .secondary : .primary.opacity(0.7))
                     ZStack {
@@ -842,12 +645,7 @@ struct ContentView: View {
         HStack(spacing: 10) {
             // Timer off circle button
             Button {
-                selectedDuration = nil
-                offTimer?.invalidate()
-                offTimer = nil
-                countdownTimer?.invalidate()
-                countdownTimer = nil
-                remainingSeconds = nil
+                coffeinManager.stopTimer()
             } label: {
                 Image(systemName: "stop.fill")
                     .font(.system(size: 16, weight: .semibold))
@@ -855,7 +653,7 @@ struct ContentView: View {
                     .frame(width: 48, height: 48)
                     .background(
                         Circle().fill(
-                            selectedDuration == nil
+                            coffeinManager.initialDuration == 0
                             ? (colorScheme == .dark ? Color.white.opacity(0.22) : Color.black.opacity(0.10))
                             : (colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.06))
                         )
@@ -865,8 +663,7 @@ struct ContentView: View {
 
             // 30 min preset
             Button {
-                selectedDuration = 30 * 60
-                scheduleOffTimerIfNeeded()
+                coffeinManager.startTimer(duration: 30 * 60)
             } label: {
                 VStack(spacing: 2) {
                     Text("30")
@@ -877,7 +674,7 @@ struct ContentView: View {
                 .frame(width: 48, height: 48)
                 .background(
                     Circle().fill(
-                        (selectedDuration == 30 * 60)
+                        (coffeinManager.initialDuration == 30 * 60)
                         ? (colorScheme == .dark ? Color.white.opacity(0.22) : Color.black.opacity(0.10))
                         : (colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.06))
                     )
@@ -887,8 +684,7 @@ struct ContentView: View {
 
             // 1 h preset
             Button {
-                selectedDuration = 60 * 60
-                scheduleOffTimerIfNeeded()
+                coffeinManager.startTimer(duration: 60 * 60)
             } label: {
                 VStack(spacing: 2) {
                     Text("1")
@@ -899,7 +695,7 @@ struct ContentView: View {
                 .frame(width: 48, height: 48)
                 .background(
                     Circle().fill(
-                        (selectedDuration == 60 * 60)
+                        (coffeinManager.initialDuration == 60 * 60)
                         ? (colorScheme == .dark ? Color.white.opacity(0.22) : Color.black.opacity(0.10))
                         : (colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.06))
                     )
@@ -909,8 +705,7 @@ struct ContentView: View {
 
             // 2 h preset
             Button {
-                selectedDuration = 2 * 60 * 60
-                scheduleOffTimerIfNeeded()
+                coffeinManager.startTimer(duration: 2 * 60 * 60)
             } label: {
                 VStack(spacing: 2) {
                     Text("2")
@@ -921,7 +716,7 @@ struct ContentView: View {
                 .frame(width: 48, height: 48)
                 .background(
                     Circle().fill(
-                        (selectedDuration == 2 * 60 * 60)
+                        (coffeinManager.initialDuration == 2 * 60 * 60)
                         ? (colorScheme == .dark ? Color.white.opacity(0.22) : Color.black.opacity(0.10))
                         : (colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.06))
                     )
@@ -931,8 +726,7 @@ struct ContentView: View {
 
             // 3 h preset
             Button {
-                selectedDuration = 3 * 60 * 60
-                scheduleOffTimerIfNeeded()
+                coffeinManager.startTimer(duration: 3 * 60 * 60)
             } label: {
                 VStack(spacing: 2) {
                     Text("3")
@@ -943,7 +737,7 @@ struct ContentView: View {
                 .frame(width: 48, height: 48)
                 .background(
                     Circle().fill(
-                        (selectedDuration == 3 * 60 * 60)
+                        (coffeinManager.initialDuration == 3 * 60 * 60)
                         ? (colorScheme == .dark ? Color.white.opacity(0.22) : Color.black.opacity(0.10))
                         : (colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.06))
                     )
@@ -1013,7 +807,6 @@ struct ContentView: View {
         )
         .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .onTapGesture {
-            // Re-apply the current custom duration as the active duration
             applyCustomFromPicker()
         }
         .onChange(of: customHours) {
@@ -1086,12 +879,13 @@ struct ContentView: View {
 
     /// Tooltip for the menu bar icon, reflecting current state and timer
     private var statusTooltip: String {
-        if !isAwake {
+        if !coffeinManager.isAwake {
             return "Coffein – idle (Mac can sleep normally)"
         }
 
         // If we have a live countdown, show remaining time
-        if let secs = remainingSeconds, secs > 0 {
+        if coffeinManager.timeRemaining > 0 {
+            let secs = Int(coffeinManager.timeRemaining)
             let hours = secs / 3600
             let minutes = (secs % 3600) / 60
 
@@ -1103,7 +897,7 @@ struct ContentView: View {
         }
 
         // If we only know the selected duration, use the summary text
-        if let _ = selectedDuration {
+        if coffeinManager.initialDuration > 0 {
             return "Coffein: Active – \(timerSummaryText)"
         }
 
@@ -1112,8 +906,8 @@ struct ContentView: View {
     }
 
     private var countdownDisplayText: String? {
-        guard isAwake, let seconds = remainingSeconds, seconds > 0 else { return nil }
-
+        guard coffeinManager.isAwake, coffeinManager.timeRemaining > 0 else { return nil }
+        let seconds = Int(coffeinManager.timeRemaining)
         let hours = seconds / 3600
         let minutes = (seconds % 3600) / 60
         let secs = seconds % 60
@@ -1126,16 +920,20 @@ struct ContentView: View {
     }
 
     private var isCustomSelected: Bool {
-        guard let selectedDuration else { return false }
+        guard coffeinManager.initialDuration > 0 else { return false }
         let presets: [TimeInterval] = [30 * 60, 60 * 60, 2 * 60 * 60, 3 * 60 * 60]
-        return !presets.contains(selectedDuration)
+        return !presets.contains(coffeinManager.initialDuration)
     }
 
     private var timerSummaryText: String {
-        guard let selectedDuration else { return "Timer off" }
-        let minutes = Int(selectedDuration / 60)
-        if minutes < 60 {
-            return "Timer: \(minutes) minutes"
+        guard coffeinManager.initialDuration > 0 else { return "Timer off" }
+        let duration = coffeinManager.initialDuration
+        let minutes = Int(duration / 60)
+        
+        if minutes < 1 {
+             return "Timer: <1 minute"
+        } else if minutes < 60 {
+            return "Timer: \(minutes) minute\(minutes > 1 ? "s" : "")"
         } else if minutes % 60 == 0 {
             let hours = minutes / 60
             return "Timer: \(hours) hour\(hours > 1 ? "s" : "")"
@@ -1148,16 +946,14 @@ struct ContentView: View {
 
     /// 0 = no timer or just started, 1 = timer almost finished
     private var timerIntensity: Double {
-        guard let selectedDuration,
-              let remainingSeconds,
-              remainingSeconds > 0 else {
+        guard coffeinManager.initialDuration > 0, coffeinManager.timeRemaining > 0 else {
             return 0
         }
 
-        let total = Int(selectedDuration)
-        guard total > 0 else { return 0 }
-
-        let ratio = max(0.0, min(1.0, Double(remainingSeconds) / Double(total)))
+        let total = coffeinManager.initialDuration
+        let remaining = coffeinManager.timeRemaining
+        
+        let ratio = max(0.0, min(1.0, remaining / total))
         // Invert: 0 at start, 1 near the end
         return 1.0 - ratio
     }
@@ -1170,87 +966,13 @@ struct ContentView: View {
         customHours = max(0, min(24, customHours))
         customMinutes = max(0, min(59, customMinutes))
 
-        // Persist custom values
-        storedCustomHours = customHours
-        storedCustomMinutes = customMinutes
+        let totalSeconds = TimeInterval((customHours * 3600) + (customMinutes * 60))
 
-        let totalMinutes = (customHours * 60) + customMinutes
-
-        if totalMinutes > 0 {
-            selectedDuration = TimeInterval(totalMinutes * 60)
+        if totalSeconds > 0 {
+            coffeinManager.startTimer(duration: totalSeconds)
         } else {
-            selectedDuration = nil
+            coffeinManager.stopTimer()
         }
-
-        scheduleOffTimerIfNeeded()
-    }
-
-    func scheduleOffTimerIfNeeded() {
-        offTimer?.invalidate()
-        offTimer = nil
-        countdownTimer?.invalidate()
-        countdownTimer = nil
-        remainingSeconds = nil
-
-        guard isAwake, let duration = selectedDuration else { return }
-
-        remainingSeconds = Int(duration)
-
-        offTimer = Timer.scheduledTimer(withTimeInterval: duration, repeats: false) { _ in
-            DispatchQueue.main.async {
-                switch timerEndAction {
-                case .deactivate:
-                    // Turn Coffein off and reset the timer to Off
-                    isAwake = false
-                    stopCaffeinate()
-                    selectedDuration = nil
-
-                case .sleep:
-                    // Turn Coffein off, clear timer, then attempt system sleep
-                    isAwake = false
-                    stopCaffeinate()
-                    selectedDuration = nil
-                    macSleep()
-                }
-
-                remainingSeconds = nil
-                countdownTimer?.invalidate()
-                countdownTimer = nil
-            }
-        }
-
-        countdownTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
-            DispatchQueue.main.async {
-                if let current = remainingSeconds, current > 0 {
-                    remainingSeconds = current - 1
-                } else {
-                    remainingSeconds = nil
-                    countdownTimer?.invalidate()
-                    countdownTimer = nil
-                }
-            }
-        }
-    }
-
-
-
-    // MARK: - System actions
-
-    func macSleep() {
-        print("COFFEIN: Requesting system sleep via IOPMSleepSystem")
-
-        let port = IOPMFindPowerManagement(mach_port_t(MACH_PORT_NULL))
-        if port == 0 {
-            print("IOPMFindPowerManagement failed")
-            return
-        }
-
-        let result = IOPMSleepSystem(port)
-        if result != kIOReturnSuccess {
-            print("IOPMSleepSystem failed with code: \(result)")
-        }
-
-        IOServiceClose(port)
     }
 }
 

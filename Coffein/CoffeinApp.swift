@@ -26,48 +26,6 @@ class CoffeinAppDelegate: NSObject, NSApplicationDelegate {
         return false
     }
 
-    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        // Debug: see when this is actually called
-        print("[Coffein] applicationShouldTerminate called. coffeinIsAwakeFlag =", coffeinIsAwakeFlag)
-
-        // If Coffein is actively preventing sleep, ask the user before quitting.
-        if coffeinIsAwakeFlag {
-            let alert = NSAlert()
-            alert.messageText = "Coffein is active"
-            alert.informativeText = "Coffein is currently keeping your Mac awake. Do you really want to quit and allow your Mac to sleep again?"
-            alert.alertStyle = .warning
-            alert.addButton(withTitle: "Quit Anyway")
-            alert.addButton(withTitle: "Cancel")
-
-            let response = alert.runModal()
-            if response == .alertFirstButtonReturn {
-                // User chose to quit anyway: always stop caffeinate before exiting
-                print("[Coffein] User chose Quit Anyway – stopping caffeinate before quit")
-                stopCaffeinate()
-                coffeinIsAwakeFlag = false
-                return .terminateNow
-            } else {
-                // User cancelled quit
-                return .terminateCancel
-            }
-        }
-
-        // If not marked as awake, still make sure nothing is left running
-        print("[Coffein] Not marked as awake on quit – calling stopCaffeinate() just in case")
-        stopCaffeinate()
-        return .terminateNow
-    }
-
-    func applicationWillTerminate(_ notification: Notification) {
-        // Last-resort safety: if anything slipped through, stop caffeinate now
-        print("[Coffein] applicationWillTerminate – final stopCaffeinate() call")
-        stopCaffeinate()
-    }
-
-    func applicationWillBecomeActive(_ notification: Notification) {
-        // Do not set mainMenu here — SwiftUI may still override it during scene/window reattachment.
-    }
-
     @objc func showAboutPanel(_ sender: Any?) {
         if let window = aboutWindow {
             window.makeKeyAndOrderFront(nil)
@@ -77,7 +35,6 @@ class CoffeinAppDelegate: NSObject, NSApplicationDelegate {
 
         let hostingController = NSHostingController(rootView: AboutView())
 
-        // Start with a tiny rect; we'll resize to the SwiftUI view's fitting size.
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 10, height: 10),
             styleMask: [.titled, .closable],
@@ -90,10 +47,7 @@ class CoffeinAppDelegate: NSObject, NSApplicationDelegate {
         window.level = .floating
         window.contentViewController = hostingController
 
-        // Ask the SwiftUI view for its ideal (fitting) size, then resize the window to hug it.
         let fittingSize = hostingController.view.fittingSize
-
-        // Add a little extra breathing room so it doesn't feel cramped at the edges.
         let targetWidth = max(340, fittingSize.width + 24)
         let targetHeight = max(320, fittingSize.height + 24)
 
@@ -104,6 +58,13 @@ class CoffeinAppDelegate: NSObject, NSApplicationDelegate {
 
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
+    }
+
+    func applicationWillBecomeActive(_ notification: Notification) {
+        // Reassert the custom menu after SwiftUI finishes any scene/menu rebuild during restore.
+        if let menu = self.mainMenuRef {
+            NSApp.mainMenu = menu
+        }
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -121,7 +82,7 @@ class CoffeinAppDelegate: NSObject, NSApplicationDelegate {
         // About item – opens custom About panel
         let aboutItem = NSMenuItem(
             title: "About \(appName)",
-            action: #selector(showAboutPanel(_:)),
+            action: #selector(CoffeinAppDelegate.showAboutPanel(_:)),
             keyEquivalent: ""
         )
         aboutItem.target = self
@@ -138,14 +99,9 @@ class CoffeinAppDelegate: NSObject, NSApplicationDelegate {
         quitItem.target = NSApp
         appMenu.addItem(quitItem)
 
-        // Restore persisted awake state on launch instead of forcing defaults
-        let storedIsAwake = UserDefaults.standard.object(forKey: "coffein_isAwake") as? Bool ?? true
-        coffeinIsAwakeFlag = storedIsAwake
-        if storedIsAwake {
-            runCaffeinate()
-        } else {
-            stopCaffeinate()
-        }
+        // The CoffeinManager now handles its own state restoration via @AppStorage
+        // and its init method. We only need to read the initial state for the menu bar.
+        let storedIsAwake = UserDefaults.standard.bool(forKey: "isAwake")
 
         // Ensure status item is created once per process and reflects restored state
         if coffeinStatusItem == nil {
@@ -218,27 +174,12 @@ class CoffeinAppDelegate: NSObject, NSApplicationDelegate {
         NSApp.mainMenu = self.mainMenuRef
 
         print("[Coffein] applicationDidFinishLaunching – installed custom main menu")
-
-        // Keep the custom main menu authoritative whenever a window becomes key (e.g., after minimize → restore)
-        NotificationCenter.default.addObserver(
-            forName: NSWindow.didBecomeKeyNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            guard let self, let menu = self.mainMenuRef else { return }
-            if NSApp.mainMenu !== menu {
-                NSApp.mainMenu = menu
-                print("[Coffein] didBecomeKey – reasserted custom main menu")
-            }
-        }
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
         // Reassert the custom menu after SwiftUI finishes any scene/menu rebuild during restore.
-        DispatchQueue.main.async { [weak self] in
-            guard let self, let menu = self.mainMenuRef else { return }
+        if let menu = self.mainMenuRef {
             NSApp.mainMenu = menu
-            print("[Coffein] applicationDidBecomeActive – reasserted custom main menu (post-activation)")
         }
     }
 
