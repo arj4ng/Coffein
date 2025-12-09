@@ -255,7 +255,7 @@ struct ContentView: View {
     private var mainCard: some View {
         ZStack {
             // Base rounded glass card
-            VStack(spacing: 18) {
+            VStack(spacing: 16) { // Adjusted VStack spacing
                 // Window controls inside the card
                 HStack(spacing: 8) {
                     // Close
@@ -329,20 +329,19 @@ struct ContentView: View {
 
                     Spacer()
                 }
-                .padding(.bottom, 2)
-                .opacity(0.92)
+                .padding(.bottom, 8) // Adjusted padding
 
                 // Header row
-                HStack {
+                HStack(spacing: 12) { // Adjusted HStack spacing
                     Image(systemName: coffeinManager.isAwake ? "sun.max.fill" : "moon.zzz.fill")
                         .symbolRenderingMode(.hierarchical)
-                        .font(.system(size: 22, weight: .medium))
+                        .font(.system(size: 24, weight: .medium)) // Slightly larger icon
 
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: 0) { // Adjusted VStack spacing
                         Text("Coffein Shot")
-                            .font(.system(size: 18, weight: .semibold))
+                            .font(.system(size: 20, weight: .semibold)) // Adjusted font size and weight
                         Text("Stop your Mac from sleeping")
-                            .font(.system(size: 14, weight: .regular))
+                            .font(.subheadline) // Using subheadline style
                             .foregroundColor(colorScheme == .dark ? .secondary : .primary.opacity(0.7))
                     }
 
@@ -354,7 +353,7 @@ struct ContentView: View {
                             .fill(coffeinManager.isAwake ? Color.green : Color.gray)
                             .frame(width: 8, height: 8)
                         Text(coffeinManager.isAwake ? "Active" : "Idle")
-                            .font(.system(size: 12, weight: .medium))
+                            .font(.footnote.weight(.medium)) // Using footnote style and medium weight
                             .foregroundColor(colorScheme == .dark ? .primary : .primary)
                     }
                     .padding(.horizontal, 10)
@@ -437,7 +436,7 @@ struct ContentView: View {
                     HStack {
                         Spacer()
                         Text(text)
-                            .font(.system(size: 16, weight: .medium, design: .monospaced))
+                            .font(.body.monospaced()) // Using body style and monospaced
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
                             .background(
@@ -450,33 +449,33 @@ struct ContentView: View {
                             )
                         Spacer()
                     }
-                    .padding(.top, 4)
+                    .padding(.top, 8) // Adjusted padding
                 }
 
                 // Description
-                VStack(spacing: 4) {
+                VStack(spacing: 8) { // Adjusted VStack spacing
                     Text(coffeinManager.isAwake ? "Your Mac won't sleep while activated" : "Your Mac can sleep normally")
-                        .font(.system(size: 16, weight: .medium))
+                        .font(.body.weight(.medium)) // Using body style and medium weight
                     Text("Powered by native macOS power assertions to keep your Mac from dozing off.")
-                        .font(.system(size: 14))
+                        .font(.subheadline) // Using subheadline style
                         .foregroundColor(colorScheme == .dark ? .secondary : .primary.opacity(0.7))
                         .multilineTextAlignment(.center)
                 }
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 4)
+                .padding(.top, 8) // Adjusted padding
 
                 // Auto-off timer (collapsible)
                 autoOffSection
 
                 // Footer tag
                 Text("v1.0 · Made by arj4ng")
-                    .font(.system(size: 10, weight: .regular))
+                    .font(.caption) // Using caption style
                     .foregroundColor(colorScheme == .dark ? .secondary : .primary.opacity(0.65))
-                    .padding(.top, 6)
+                    .padding(.top, 12) // Adjusted padding
             }
-            .padding(.top, 24)
-            .padding(.horizontal, 24)
-            .padding(.bottom, 8)
+            .padding(.top, 24) // Top padding
+            .padding(.horizontal, 20) // Horizontal padding
+            .padding(.bottom, 16) // Bottom padding
             .frame(width: 360)
             .background(
                 coffeinGlassBackground(colorScheme: colorScheme)
@@ -534,17 +533,17 @@ struct ContentView: View {
     // Extracted auto-off section to keep mainCard smaller
     @ViewBuilder
     private var autoOffSection: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 8) { // Adjusted VStack spacing
             // Header row (collapsible toggle)
             Button {
                 isTimerExpanded.toggle()
             } label: {
                 HStack(spacing: 8) {
                     Text("􀐱 Auto turn off")
-                        .font(.system(size: 14, weight: .medium))
+                        .font(.headline) // Changed to headline style
                     Spacer()
                     Text(coffeinManager.timer == nil ? "Off" : timerSummaryText)
-                        .font(.system(size: 14))
+                        .font(.subheadline) // Changed to subheadline style
                         .foregroundColor(colorScheme == .dark ? .secondary : .primary.opacity(0.7))
                     ZStack {
                         Circle()
@@ -559,27 +558,27 @@ struct ContentView: View {
             .buttonStyle(.plain)
 
             if isTimerExpanded {
-                VStack(spacing: 8) {
+                VStack(spacing: 10) { // Adjusted VStack spacing
                     timerPresetsRow
                     customTimerCard
                     timerEndActionCard
                 }
             }
         }
-        .padding(.top, 6)
+        .padding(.top, 12) // Adjusted padding
     }
 
     @ViewBuilder
     private var timerPresetsRow: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 16) {
             // Timer off circle button
             Button {
                 coffeinManager.stopTimer()
             } label: {
                 Image(systemName: "stop.fill")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.system(size: 24, weight: .bold))
                     .foregroundColor(.primary)
-                    .frame(width: 48, height: 48)
+                    .frame(width: 48, height: 48) // Adjusted frame size
                     .background(
                         Circle().fill(
                             coffeinManager.initialDuration == 0
@@ -594,13 +593,13 @@ struct ContentView: View {
             Button {
                 coffeinManager.startTimer(duration: 30 * 60)
             } label: {
-                VStack(spacing: 2) {
+                VStack(spacing: 0) { // Adjusted VStack spacing to remove gap
                     Text("30")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.system(size: 16, weight: .bold))
                     Text("Min")
-                        .font(.system(size: 10, weight: .medium))
+                        .font(.caption.weight(.medium))
                 }
-                .frame(width: 48, height: 48)
+                .frame(width: 48, height: 48) // Adjusted frame size
                 .background(
                     Circle().fill(
                         (coffeinManager.initialDuration == 30 * 60)
@@ -615,13 +614,13 @@ struct ContentView: View {
             Button {
                 coffeinManager.startTimer(duration: 60 * 60)
             } label: {
-                VStack(spacing: 2) {
+                VStack(spacing: 0) { // Adjusted VStack spacing to remove gap
                     Text("1")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.system(size: 20, weight: .bold))
                     Text("Hr")
-                        .font(.system(size: 10, weight: .medium))
+                        .font(.caption.weight(.medium))
                 }
-                .frame(width: 48, height: 48)
+                .frame(width: 48, height: 48) // Adjusted frame size
                 .background(
                     Circle().fill(
                         (coffeinManager.initialDuration == 60 * 60)
@@ -636,13 +635,13 @@ struct ContentView: View {
             Button {
                 coffeinManager.startTimer(duration: 2 * 60 * 60)
             } label: {
-                VStack(spacing: 2) {
+                VStack(spacing: 0) { // Adjusted VStack spacing to remove gap
                     Text("2")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.system(size: 20, weight: .bold))
                     Text("Hr")
-                        .font(.system(size: 10, weight: .medium))
+                        .font(.caption.weight(.medium))
                 }
-                .frame(width: 48, height: 48)
+                .frame(width: 48, height: 48) // Adjusted frame size
                 .background(
                     Circle().fill(
                         (coffeinManager.initialDuration == 2 * 60 * 60)
@@ -657,13 +656,13 @@ struct ContentView: View {
             Button {
                 coffeinManager.startTimer(duration: 3 * 60 * 60)
             } label: {
-                VStack(spacing: 2) {
+                VStack(spacing: 0) { // Adjusted VStack spacing to remove gap
                     Text("3")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.system(size: 20, weight: .bold))
                     Text("Hr")
-                        .font(.system(size: 10, weight: .medium))
+                        .font(.caption.weight(.medium))
                 }
-                .frame(width: 48, height: 48)
+                .frame(width: 48, height: 48) // Adjusted frame size
                 .background(
                     Circle().fill(
                         (coffeinManager.initialDuration == 3 * 60 * 60)
@@ -674,57 +673,56 @@ struct ContentView: View {
             }
             .buttonStyle(.plain)
         }
-        .padding(.top, 4)
+        .padding(.horizontal, 12) // Added horizontal padding
+        .padding(.top, 8)
     }
 
     @ViewBuilder
     private var customTimerCard: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) { // Adjusted VStack spacing
             HStack {
                 Text("Custom")
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.headline) // Changed to headline style
 
                 Spacer()
 
                 HStack(spacing: 12) {
                     // Hours field + stepper
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: 4) { // Adjusted VStack spacing
                         Text("Hours")
-                            .font(.system(size: 10, weight: .regular))
-                            .foregroundColor(colorScheme == .dark ? .secondary : .primary.opacity(0.7))
+                            .font(.footnote) // Changed to footnote style
 
                         Stepper(value: $customHours, in: 0...24) {
                             TextField("0", value: $customHours, formatter: hoursFormatter)
-                                .font(.system(size: 12, weight: .medium, design: .monospaced))
+                                .font(.body.monospaced()) // Changed to body style, monospaced
                                 .multilineTextAlignment(.center)
-                                .frame(width: 32)
+                                .frame(width: 36) // Slightly increased width
                         }
                     }
 
                     // Minutes field + stepper
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: 4) { // Adjusted VStack spacing
                         Text("Minutes")
-                            .font(.system(size: 10, weight: .regular))
-                            .foregroundColor(colorScheme == .dark ? .secondary : .primary.opacity(0.7))
+                            .font(.footnote) // Changed to footnote style
 
                         Stepper(value: $customMinutes, in: 0...59) {
                             TextField("0", value: $customMinutes, formatter: minutesFormatter)
-                                .font(.system(size: 12, weight: .medium, design: .monospaced))
+                                .font(.body.monospaced()) // Changed to body style, monospaced
                                 .multilineTextAlignment(.center)
-                                .frame(width: 32)
+                                .frame(width: 36) // Slightly increased width
                         }
                     }
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
+                .padding(.horizontal, 10) // Adjusted padding
+                .padding(.vertical, 6) // Adjusted padding
                 .background(
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .fill(colorScheme == .dark ? Color.white.opacity(0.10) : Color.black.opacity(0.05))
                 )
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 12) // Adjusted padding
+        .padding(.vertical, 10) // Adjusted padding
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -748,10 +746,10 @@ struct ContentView: View {
 
     @ViewBuilder
     private var timerEndActionCard: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 8) { // Adjusted VStack spacing
             HStack(spacing: 8) {
                 Text("When timer ends")
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.headline) // Changed to headline style
                     .foregroundColor(colorScheme == .dark ? .primary : .primary)
                 Spacer()
                 Picker(
@@ -769,16 +767,17 @@ struct ContentView: View {
                 }
                 .labelsHidden()
                 .pickerStyle(.menu)  // dropdown style
+                .font(.subheadline) // Applied font to picker
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 12) // Adjusted padding
+        .padding(.vertical, 10) // Adjusted padding
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(colorScheme == .dark ? Color.white.opacity(0.06) : Color.black.opacity(0.05))
         )
-        .font(.system(size: 11))
+        // Removed redundant font modifier, as it's applied inside
     }
 
     // MARK: - Window helper

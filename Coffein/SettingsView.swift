@@ -28,35 +28,37 @@ struct SettingsView: View {
         ZStack {
             SettingsBackground(colorScheme: colorScheme)
             
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 16) { // Adjusted VStack spacing
                 SettingsHeaderView(colorScheme: colorScheme, onClose: onClose)
                 
                 Text("General")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.headline) // Changed to headline style
                     .textCase(.uppercase)
                     .foregroundColor(.secondary)
+                    .padding(.top, 16) // Adjusted padding
                 
                 SettingsGeneralSection(colorScheme: colorScheme, launchAtLogin: $coffeinManager.launchAtLogin)
                 
                 Text("Appearance")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.headline) // Changed to headline style
                     .textCase(.uppercase)
                     .foregroundColor(.secondary)
-                    .padding(.top, 4)
+                    .padding(.top, 16) // Adjusted padding
                 
                 SettingsAppearanceSection(themeModeBinding: themeModeBinding)
                 
                 Text("Power")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.headline) // Changed to headline style
                     .textCase(.uppercase)
                     .foregroundColor(.secondary)
-                    .padding(.top, 4)
+                    .padding(.top, 16) // Adjusted padding
                 
                 SettingsPowerSection(selectedMode: $coffeinManager.sleepMode)
                 
                 Spacer(minLength: 0)
             }
-            .padding(20)
+            .padding(.horizontal, 20) // Adjusted horizontal padding
+            .padding(.vertical, 16) // Adjusted vertical padding
             .onAppear {
                 coffeinManager.checkLaunchAtLogin()
             }
@@ -135,13 +137,13 @@ private struct SettingsHeaderView: View {
     let onClose: () -> Void
 
     var body: some View {
-        HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
+        HStack(spacing: 12) { // Adjusted HStack spacing
+            VStack(alignment: .leading, spacing: 4) { // Adjusted VStack spacing
                 Text("Settings")
-                    .font(.system(size: 18, weight: .semibold, design: .rounded))
+                    .font(.system(size: 20, weight: .semibold)) // Adjusted font size and weight
                 
                 Text("Fine-tune how Coffein behaves")
-                    .font(.system(size: 11, weight: .regular))
+                    .font(.subheadline) // Changed to subheadline style
                     .foregroundColor(.secondary)
             }
             
@@ -151,8 +153,8 @@ private struct SettingsHeaderView: View {
                 onClose()
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 10, weight: .bold))
-                    .padding(6)
+                    .font(.system(size: 11, weight: .bold)) // Slightly increased font size
+                    .padding(8) // Adjusted padding
                     .background(
                         Circle().fill(
                             colorScheme == .dark
@@ -171,25 +173,25 @@ private struct SettingsGeneralSection: View {
     @Binding var launchAtLogin: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) { // Adjusted VStack spacing
+            HStack(alignment: .top, spacing: 12) { // Adjusted HStack spacing
                 Image(systemName: "clock.arrow.circlepath")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.body.weight(.semibold)) // Changed to body style, semibold
                     .foregroundColor(.secondary)
                     .padding(.top, 2)
 
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 4) { // Adjusted VStack spacing
                     Toggle("Start Coffein at login", isOn: $launchAtLogin)
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.body) // Changed to body style
 
                     Text("Keep Coffein ready in your menu bar right after logging into macOS.")
-                        .font(.system(size: 11))
+                        .font(.subheadline) // Changed to subheadline style
                         .foregroundColor(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
-        .padding(12)
+        .padding(16) // Adjusted padding
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(
@@ -206,14 +208,14 @@ private struct SettingsAppearanceSection: View {
     @Binding var themeModeBinding: CoffeinThemeMode
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .center, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) { // Adjusted VStack spacing
+            HStack(alignment: .center, spacing: 12) { // Adjusted HStack spacing
                 Image(systemName: "moon.stars.circle.fill")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.body.weight(.semibold)) // Changed to body style, semibold
                     .foregroundColor(.secondary)
 
                 Text("Theme")
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.body) // Changed to body style
 
                 Spacer(minLength: 8)
 
@@ -226,13 +228,14 @@ private struct SettingsAppearanceSection: View {
                 .pickerStyle(.menu)
                 .fixedSize()
                 .frame(maxWidth: 120)
+                .font(.callout) // Applied font to picker text
             }
 
             Text("Choose how Coffein looks")
-                .font(.system(size: 11))
+                .font(.subheadline) // Changed to subheadline style
                 .foregroundColor(.secondary)
         }
-        .padding(12)
+        .padding(16) // Adjusted padding
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(
@@ -249,15 +252,15 @@ private struct SettingsPowerSection: View {
     @Binding var selectedMode: CoffeinSleepMode
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .center, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) { // Adjusted VStack spacing
+            HStack(alignment: .center, spacing: 12) { // Adjusted HStack spacing
                 Image(systemName: "bolt.fill")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.body.weight(.semibold)) // Changed to body style, semibold
                     .foregroundColor(.secondary)
 
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 4) { // Adjusted VStack spacing
                     Text("Behavior")
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.body) // Changed to body style
                         .layoutPriority(1)
                 }
 
@@ -272,14 +275,15 @@ private struct SettingsPowerSection: View {
                 .pickerStyle(.menu)
                 .fixedSize()
                 .frame(maxWidth: 150)
+                .font(.callout) // Applied font to picker text
             }
 
             Text(selectedMode.modeDescription)
-                .font(.system(size: 11))
+                .font(.subheadline) // Changed to subheadline style
                 .foregroundColor(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(12)
+        .padding(16) // Adjusted padding
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(
