@@ -163,10 +163,8 @@ struct ContentView: View {
     @State private var customMinutes: Int = 0
     
     @State private var isTimerExpanded: Bool = false
-
-    // Persist small preferences between launches
+    
     @AppStorage("coffein_timerEndActionRaw") private var timerEndActionRaw: String = TimerEndAction.deactivate.rawValue
-    @AppStorage("coffein_isTimerExpanded")   private var storedIsTimerExpanded: Bool = false
     
     @AppStorage("coffein_theme_mode") private var themeModeRaw: String = CoffeinThemeMode.system.rawValue
 
@@ -211,7 +209,7 @@ struct ContentView: View {
             }
 
             // Restore simple preferences from storage
-            isTimerExpanded = storedIsTimerExpanded
+            // isTimerExpanded = storedIsTimerExpanded
         }
         .onChange(of: coffeinManager.isAwake) {
             NotificationCenter.default.post(name: .coffeinUpdateStatusItem, object: nil, userInfo: ["isAwake": coffeinManager.isAwake])
@@ -228,9 +226,9 @@ struct ContentView: View {
                 }
             }
         }
-        .onChange(of: isTimerExpanded) {
-            storedIsTimerExpanded = isTimerExpanded
-        }
+        // .onChange(of: isTimerExpanded) {
+        //     storedIsTimerExpanded = isTimerExpanded
+        // }
         .onChange(of: coffeinManager.timeRemaining, initial: false) {
             NotificationCenter.default.post(name: .coffeinUpdateStatusItem, object: nil, userInfo: ["isAwake": coffeinManager.isAwake])
         }
@@ -436,19 +434,28 @@ struct ContentView: View {
                     HStack {
                         Spacer()
                         Text(text)
-                            .font(.body.monospaced()) // Using body style and monospaced
+                            .font(.system(size: 18, design: .monospaced).weight(.bold)) // Make font 50% smaller
+                            .shadow(color: Color.green.opacity(0.8), radius: 5, x: 0, y: 0) // Enhanced subtle green glow
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
                             .background(
                                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .fill(Color.black.opacity(0.35))
+                                    .fill(LinearGradient(
+                                        gradient: Gradient(colors: [
+                                            Color(red: 0.04, green: 0.08, blue: 0.07), // Slightly darker
+                                            Color(red: 0.06, green: 0.12, blue: 0.09)  // Slightly lighter
+                                        ]),
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    ))
                             )
                             .overlay(
                                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .stroke(Color.white.opacity(0.25), lineWidth: 1)
+                                    .stroke(Color(red: 0.1, green: 0.2, blue: 0.15), lineWidth: 1.5) // Lighter blue-green for stroke
                             )
                         Spacer()
                     }
+                    .foregroundColor(.white) // Set text color to white
                     .padding(.top, 8) // Adjusted padding
                 }
 
@@ -734,12 +741,6 @@ struct ContentView: View {
         )
         .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .onTapGesture {
-            applyCustomFromPicker()
-        }
-        .onChange(of: customHours) {
-            applyCustomFromPicker()
-        }
-        .onChange(of: customMinutes) {
             applyCustomFromPicker()
         }
     }
