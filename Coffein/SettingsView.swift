@@ -54,6 +54,14 @@ struct SettingsView: View {
                     .padding(.top, 16) // Adjusted padding
                 
                 SettingsPowerSection(selectedMode: $coffeinManager.sleepMode)
+
+                Text("Battery Safety")
+                    .font(.headline)
+                    .textCase(.uppercase)
+                    .foregroundColor(.secondary)
+                    .padding(.top, 16)
+                
+                SettingsBatterySafetySection(batteryDeactivationThreshold: $coffeinManager.batteryDeactivationThreshold)
                 
                 Spacer(minLength: 0)
             }
@@ -284,6 +292,62 @@ private struct SettingsPowerSection: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(16) // Adjusted padding
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(
+                    colorScheme == .dark
+                    ? Color.white.opacity(0.05)
+                    : Color.black.opacity(0.03)
+                )
+        )
+    }
+}
+
+// NEW: Private struct for Battery Safety Section
+private struct SettingsBatterySafetySection: View {
+    @Environment(\.colorScheme) var colorScheme
+    @Binding var batteryDeactivationThreshold: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "battery.100") // A relevant SF Symbol for battery
+                    .font(.body.weight(.semibold))
+                    .foregroundColor(.secondary)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack { // Added HStack for Text and Percentage
+                        Text("Deactivate Coffein when battery is below:")
+                            .font(.body)
+                        Spacer()
+                        Text("\(batteryDeactivationThreshold)%")
+                            .font(.body.monospacedDigit())
+                    }
+                    
+                    Slider(
+                        value: Binding(
+                            get: { Double(batteryDeactivationThreshold) },
+                            set: { batteryDeactivationThreshold = Int($0) }
+                        ),
+                        in: 0...100,
+                        step: 5
+                    ) {
+                        Text("Threshold")
+                    } minimumValueLabel: {
+                        Text("0%")
+                    } maximumValueLabel: {
+                        Text("100%")
+                    }
+                    .controlSize(.small)
+                    
+                    Text("Coffein will automatically deactivate and stop any active timers if your battery level drops below this percentage.")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(

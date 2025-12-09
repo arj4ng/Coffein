@@ -225,8 +225,10 @@ class CoffeinAppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillBecomeActive(_ notification: Notification) {
         // Reassert the custom menu after SwiftUI finishes any scene/menu rebuild during restore.
-        if let menu = self.mainMenuRef {
-            NSApp.mainMenu = menu
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            if let menu = self.mainMenuRef {
+                NSApp.mainMenu = menu
+            }
         }
     }
 
@@ -339,8 +341,35 @@ class CoffeinAppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidBecomeActive(_ notification: Notification) {
         // Reassert the custom menu after SwiftUI finishes any scene/menu rebuild during restore.
-        if let menu = self.mainMenuRef {
-            NSApp.mainMenu = menu
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            if let menu = self.mainMenuRef {
+                NSApp.mainMenu = menu
+            }
+        }
+        // Explicitly update the status item to ensure its state is current after the app becomes active.
+        self.coffeinStatusMenuHandler.updateStatusItem(
+            isAwake: self.coffeinManager.isAwake // Rely on internal statusTooltip calculation
+        )
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        if coffeinManager.isAwake {
+            let alert = NSAlert()
+            alert.messageText = "Coffein is active."
+            alert.informativeText = "Do you want to quit the app? Your Mac will be allowed to sleep. Or you can cancel to keep Coffein running in the background."
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "Quit")
+            alert.addButton(withTitle: "Cancel")
+
+            let response = alert.runModal()
+            if response == .alertFirstButtonReturn {
+                return .terminateNow
+            } else {
+                return .terminateCancel
+            }
+        } else {
+            // Coffein is idle, terminate immediately without prompt
+            return .terminateNow
         }
     }
 
@@ -374,6 +403,25 @@ struct CoffeinApp: App {
         .windowStyle(.hiddenTitleBar)
         .windowToolbarStyle(.unifiedCompact)
         .windowResizability(.contentSize)
+        .commands {
+            // Remove 'File' menu items
+            CommandGroup(replacing: .newItem) { }
+            CommandGroup(replacing: .saveItem) { }
+            CommandGroup(replacing: .printItem) { }
+
+            // Remove 'Edit' menu items
+            CommandGroup(replacing: .pasteboard) { } // Covers Cut, Copy, Paste
+            CommandGroup(replacing: .undoRedo) { }
+
+            // Remove 'Window' menu items
+            CommandGroup(replacing: .windowArrangement) { }
+            CommandGroup(replacing: .windowSize) { }
+            CommandGroup(replacing: .windowList) { }
+
+            // Other default command groups
+            CommandGroup(replacing: .appSettings) { } // If present
+            CommandGroup(replacing: .help) { } // If you wish to remove the default Help menu
+        }
     }
 }
 
@@ -469,7 +517,7 @@ fileprivate struct AboutView: View {
                 }
                 .padding(.bottom, 2)
 
-                Spacer(minLength: 0)
+                Spacer()
             }
             .padding(20)
             .frame(maxWidth: 320)
