@@ -7,10 +7,173 @@
 
 import SwiftUI
 import AppKit
+import Combine
+
+
+// MARK: - Notification Names
+
+extension Notification.Name {
+    static let coffeinForceStop        = Notification.Name("coffeinForceStop")
+    static let coffeinQuickTimerPreset = Notification.Name("coffeinQuickTimerPreset")
+    static let coffeinUpdateStatusItem = Notification.Name("coffeinUpdateStatusItem") // New notification for status item updates
+}
+
+
+// MARK: - CoffeinStatusMenuHandler
+
+class CoffeinStatusMenuHandler: NSObject, ObservableObject {
+    @Published var statusItem: NSStatusItem?
+    var coffeinManager: CoffeinManager!
+    private var cancellables = Set<AnyCancellable>()
+
+    override init() {
+        super.init()
+    }
+
+    func configure(with manager: CoffeinManager) {
+        self.coffeinManager = manager
+
+        NotificationCenter.default.publisher(for: .coffeinUpdateStatusItem)
+            .sink { [weak self] notification in
+                guard let self = self else { return }
+                if let isAwake = notification.userInfo?["isAwake"] as? Bool {
+                    self.updateStatusItem(isAwake: isAwake, tooltip: self.statusTooltip)
+                }
+            }
+            .store(in: &cancellables)
+
+        // Set up observers for coffeinManager properties
+        coffeinManager.$isAwake
+            .sink { [weak self] isAwake in
+                self?.updateStatusItem(isAwake: isAwake, tooltip: self?.statusTooltip)
+            }
+            .store(in: &cancellables)
+
+        coffeinManager.$timeRemaining
+            .sink { [weak self] _ in
+                self?.updateStatusItem(isAwake: self?.coffeinManager.isAwake ?? false, tooltip: self?.statusTooltip)
+            }
+            .store(in: &cancellables)
+
+        coffeinManager.$initialDuration
+            .sink { [weak self] _ in
+                self?.updateStatusItem(isAwake: self?.coffeinManager.isAwake ?? false, tooltip: self?.statusTooltip)
+            }
+            .store(in: &cancellables)
+    }
+
+    func setupStatusItem(item: NSStatusItem, initialIsAwake: Bool) {
+        self.statusItem = item
+        updateStatusItem(isAwake: initialIsAwake, tooltip: nil)
+    }
+
+
+    func updateStatusItem(isAwake: Bool, tooltip: String? = nil) {
+        guard let button = statusItem?.button else { return }
+
+        let defaultText = isAwake ? "Coffein: Active – your Mac won't sleep" : "Coffein – idle (Mac can sleep normally)"
+        let tip = tooltip ?? defaultText
+
+        let symbol = isAwake ? "􀋦" : "􀋩"
+        let font = NSFont.systemFont(ofSize: 15)
+        let attributed = NSAttributedString(string: symbol, attributes: [ .font: font ])
+
+        button.image = nil
+        button.title = ""
+        button.attributedTitle = attributed
+        button.toolTip = tip
+
+        if let menu = statusItem?.menu, let first = menu.items.first {
+            first.title = tip
+        }
+    }
+
+    // MARK: - Menu Actions
+
+    @objc func openMain(_ sender: Any?) {
+        NSApp.bringCoffeinToFront(sender)
+    }
+
+    @objc func quickTimerOff(_ sender: Any?) {
+        coffeinManager.stopTimer()
+    }
+
+    @objc func quickTimer30(_ sender: Any?) {
+        coffeinManager.startTimer(duration: 30 * 60)
+    }
+
+    @objc func quickTimer60(_ sender: Any?) {
+        coffeinManager.startTimer(duration: 60 * 60)
+    }
+
+    @objc func quickTimer120(_ sender: Any?) {
+        coffeinManager.startTimer(duration: 2 * 60 * 60)
+    }
+
+    @objc func quickTimer180(_ sender: Any?) {
+        coffeinManager.startTimer(duration: 3 * 60 * 60)
+    }
+
+    @objc func openAbout(_ sender: Any?) {
+        NSApp.sendAction(#selector(CoffeinAppDelegate.showAboutPanel(_:)), to: nil, from: sender)
+    }
+
+    @objc func quitApp(_ sender: Any?) {
+        NSApp.terminate(sender)
+    }
+
+
+    // MARK: - Tooltip generation
+
+    private var statusTooltip: String {
+        if !coffeinManager.isAwake {
+            return "Coffein – idle (Mac can sleep normally)"
+        }
+
+        if coffeinManager.timeRemaining > 0 {
+            let secs = Int(coffeinManager.timeRemaining)
+            let hours = secs / 3600
+            let minutes = (secs % 3600) / 60
+
+            if hours > 0 {
+                return String(format: "Coffein: Active – Sleep in %dh %02dm", hours, minutes)
+            } else {
+                return String(format: "Coffein: Active – Sleep in %d min", minutes)
+            }
+        }
+
+        if coffeinManager.initialDuration > 0 {
+            let duration = coffeinManager.initialDuration
+            let minutes = Int(duration / 60)
+
+            if minutes < 1 {
+                return "Coffein: Active – Timer: <1 minute"
+            } else if minutes < 60 {
+                return "Coffein: Active – Timer: \(minutes) minute\(minutes > 1 ? "s" : "")"
+            } else if minutes % 60 == 0 {
+                let hours = minutes / 60
+                return "Coffein: Active – Timer: \(hours) hour\(hours > 1 ? "s" : "")"
+            } else {
+                let hours = minutes / 60
+                let mins = minutes % 60
+                return "Coffein: Active – Timer: \(hours)h \(mins)m"
+            }
+        }
+
+        return "Coffein: Active – your Mac won't sleep"
+    }
+}
+
+
+// MARK: - CoffeinAppDelegate
 
 class CoffeinAppDelegate: NSObject, NSApplicationDelegate {
+    var coffeinManager: CoffeinManager!
+    var coffeinStatusMenuHandler: CoffeinStatusMenuHandler!
+
     private var aboutWindow: NSWindow?
     private var mainMenuRef: NSMenu?
+    private var coffeinStatusItem: NSStatusItem?
 
     func application(_ application: NSApplication,
                      shouldSaveApplicationState coder: NSCoder) -> Bool {
@@ -99,73 +262,71 @@ class CoffeinAppDelegate: NSObject, NSApplicationDelegate {
         quitItem.target = NSApp
         appMenu.addItem(quitItem)
 
+        self.coffeinStatusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+
         // The CoffeinManager now handles its own state restoration via @AppStorage
         // and its init method. We only need to read the initial state for the menu bar.
         let storedIsAwake = UserDefaults.standard.bool(forKey: "isAwake")
 
-        // Ensure status item is created once per process and reflects restored state
-        if coffeinStatusItem == nil {
-            let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        if let button = self.coffeinStatusItem?.button {
+            button.image = nil
+            button.title = ""
+            button.toolTip = "Coffein"
+        }
 
-            if let button = item.button {
-                button.image = nil
-                button.title = ""
-                button.toolTip = "Coffein"
-            }
+        let menu = NSMenu()
 
-            let menu = NSMenu()
+        // First line: current state/tooltip (disabled)
+        let initialTip = storedIsAwake ? "Coffein: Active – your Mac won't sleep" : "Coffein – idle (Mac can sleep normally)"
+        let stateItem = NSMenuItem(title: initialTip, action: nil, keyEquivalent: "")
+        stateItem.isEnabled = false
+        menu.addItem(stateItem)
+        menu.addItem(NSMenuItem.separator())
 
-            // First line: current state/tooltip (disabled)
-            let initialTip = storedIsAwake ? "Coffein: Active – your Mac won't sleep" : "Coffein – idle (Mac can sleep normally)"
-            let stateItem = NSMenuItem(title: initialTip, action: nil, keyEquivalent: "")
-            stateItem.isEnabled = false
-            menu.addItem(stateItem)
-            menu.addItem(NSMenuItem.separator())
+        // Open main UI
+        let openItem = NSMenuItem(title: "Open Coffein", action: #selector(self.coffeinStatusMenuHandler.openMain(_:)), keyEquivalent: "")
+        openItem.target = self.coffeinStatusMenuHandler
+        menu.addItem(openItem)
 
-            // Open main UI
-            let openItem = NSMenuItem(title: "Open Coffein", action: #selector(CoffeinStatusMenuHandler.openMain(_:)), keyEquivalent: "")
-            openItem.target = coffeinStatusMenuHandler
-            menu.addItem(openItem)
+        menu.addItem(NSMenuItem.separator())
 
-            menu.addItem(NSMenuItem.separator())
+        // Quick timer presets from the menu
+        let offItem = NSMenuItem(title: "Timer Off", action: #selector(self.coffeinStatusMenuHandler.quickTimerOff(_:)), keyEquivalent: "")
+        offItem.target = self.coffeinStatusMenuHandler
+        menu.addItem(offItem)
 
-            // Quick timer presets from the menu
-            let offItem = NSMenuItem(title: "Timer Off", action: #selector(CoffeinStatusMenuHandler.quickTimerOff(_:)), keyEquivalent: "")
-            offItem.target = coffeinStatusMenuHandler
-            menu.addItem(offItem)
+        let t30 = NSMenuItem(title: "30 min", action: #selector(self.coffeinStatusMenuHandler.quickTimer30(_:)), keyEquivalent: "")
+        t30.target = self.coffeinStatusMenuHandler
+        menu.addItem(t30)
 
-            let t30 = NSMenuItem(title: "30 min", action: #selector(CoffeinStatusMenuHandler.quickTimer30(_:)), keyEquivalent: "")
-            t30.target = coffeinStatusMenuHandler
-            menu.addItem(t30)
+        let t60 = NSMenuItem(title: "1 hour", action: #selector(self.coffeinStatusMenuHandler.quickTimer60(_:)), keyEquivalent: "")
+        t60.target = self.coffeinStatusMenuHandler
+        menu.addItem(t60)
 
-            let t60 = NSMenuItem(title: "1 hour", action: #selector(CoffeinStatusMenuHandler.quickTimer60(_:)), keyEquivalent: "")
-            t60.target = coffeinStatusMenuHandler
-            menu.addItem(t60)
+        let t120 = NSMenuItem(title: "2 hours", action: #selector(self.coffeinStatusMenuHandler.quickTimer120(_:)), keyEquivalent: "")
+        t120.target = self.coffeinStatusMenuHandler
+        menu.addItem(t120)
 
-            let t120 = NSMenuItem(title: "2 hours", action: #selector(CoffeinStatusMenuHandler.quickTimer120(_:)), keyEquivalent: "")
-            t120.target = coffeinStatusMenuHandler
-            menu.addItem(t120)
+        let t180 = NSMenuItem(title: "3 hours", action: #selector(self.coffeinStatusMenuHandler.quickTimer180(_:)), keyEquivalent: "")
+        t180.target = self.coffeinStatusMenuHandler
+        menu.addItem(t180)
 
-            let t180 = NSMenuItem(title: "3 hours", action: #selector(CoffeinStatusMenuHandler.quickTimer180(_:)), keyEquivalent: "")
-            t180.target = coffeinStatusMenuHandler
-            menu.addItem(t180)
+        menu.addItem(NSMenuItem.separator())
 
-            menu.addItem(NSMenuItem.separator())
+        // About + Quit
+        let statusMenuAboutItem = NSMenuItem(title: "About Coffein", action: #selector(self.coffeinStatusMenuHandler.openAbout(_:)), keyEquivalent: "")
+        statusMenuAboutItem.target = self.coffeinStatusMenuHandler
+        menu.addItem(statusMenuAboutItem)
 
-            // About + Quit
-            let aboutItem = NSMenuItem(title: "About Coffein", action: #selector(CoffeinStatusMenuHandler.openAbout(_:)), keyEquivalent: "")
-            aboutItem.target = coffeinStatusMenuHandler
-            menu.addItem(aboutItem)
+        let statusMenuQuitItem = NSMenuItem(title: "Quit Coffein", action: #selector(self.coffeinStatusMenuHandler.quitApp(_:)), keyEquivalent: "q")
+        statusMenuQuitItem.target = self.coffeinStatusMenuHandler
+        menu.addItem(statusMenuQuitItem)
 
-            let quitItem = NSMenuItem(title: "Quit Coffein", action: #selector(CoffeinStatusMenuHandler.quitApp(_:)), keyEquivalent: "q")
-            quitItem.target = coffeinStatusMenuHandler
-            menu.addItem(quitItem)
-
-            item.menu = menu
-            coffeinStatusItem = item
-
-            // Ensure icon/tooltip reflect restored state
-            updateCoffeinStatusItem(isAwake: storedIsAwake)
+        self.coffeinStatusItem?.menu = menu
+        if let statusItem = self.coffeinStatusItem {
+            self.coffeinStatusMenuHandler.setupStatusItem(item: statusItem, initialIsAwake: storedIsAwake)
+        } else {
+            print("[Coffein] ERROR: NSStatusItem could not be created or is nil.")
         }
 
         self.mainMenuRef = mainMenu
@@ -183,15 +344,32 @@ class CoffeinAppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    func applicationWillTerminate(_ notification: Notification) {
+        print("[Coffein] applicationWillTerminate – releasing power assertions.")
+        coffeinManager.sleepManager.stop()
+    }
 }
+
+
+
+// MARK: - CoffeinApp
 
 @main
 struct CoffeinApp: App {
+    let coffeinManager = CoffeinManager()
+    let coffeinStatusMenuHandler = CoffeinStatusMenuHandler()
     @NSApplicationDelegateAdaptor(CoffeinAppDelegate.self) var appDelegate
+
+    init() {
+        appDelegate.coffeinManager = coffeinManager
+        appDelegate.coffeinStatusMenuHandler = coffeinStatusMenuHandler
+        // NOTE: If configure is needed, call it from applicationDidFinishLaunching in the delegate.
+    }
 
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environmentObject(coffeinManager)
         }
         .windowStyle(.hiddenTitleBar)
         .windowToolbarStyle(.unifiedCompact)
@@ -199,7 +377,10 @@ struct CoffeinApp: App {
     }
 }
 
-private struct AboutView: View {
+
+// MARK: - AboutView
+
+fileprivate struct AboutView: View {
     @Environment(\.colorScheme) private var colorScheme
 
     private var appName: String {
@@ -297,4 +478,3 @@ private struct AboutView: View {
         .frame(minWidth: 320, minHeight: 260)
     }
 }
-

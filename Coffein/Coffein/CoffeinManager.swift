@@ -43,7 +43,6 @@ class CoffeinManager: ObservableObject {
         didSet {
             print("[CoffeinManager] isAwake changed to: \(isAwake)")
             appStorageIsAwake = isAwake
-            coffeinIsAwakeFlag = isAwake
             
             if isAwake {
                 sleepManager.start(mode: sleepMode)
@@ -63,14 +62,13 @@ class CoffeinManager: ObservableObject {
     @Published var initialDuration: TimeInterval = 0
     
     // MARK: - Sleep Management
-    private var sleepManager = CoffeinSleepManager()
+    internal var sleepManager = CoffeinSleepManager()
     @Published var sleepMode: CoffeinSleepMode
 
     init() {
         _sleepModeRaw = UserDefaults.standard.string(forKey: "sleepMode") ?? CoffeinSleepMode.systemAndDisplay.rawValue
         self.sleepMode = CoffeinSleepMode(rawValue: _sleepModeRaw) ?? .systemAndDisplay
         self.isAwake = appStorageIsAwake
-        coffeinIsAwakeFlag = self.isAwake
         
         print("[CoffeinManager] Initialized. isAwake: \(isAwake), sleepMode: \(sleepMode)")
         
@@ -252,4 +250,4 @@ class CoffeinSleepManager {
     }
 }
 
-var coffeinIsAwakeFlag: Bool = true
+

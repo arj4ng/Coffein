@@ -82,78 +82,7 @@ private func coffeinLiquidGlassBorder(colorScheme: ColorScheme) -> some View {
 }
 
 
-extension Notification.Name {
-    static let coffeinForceStop        = Notification.Name("coffeinForceStop")
-    static let coffeinQuickTimerPreset = Notification.Name("coffeinQuickTimerPreset")
-}
 
-// Global menu bar status item for Coffein
-var coffeinStatusItem: NSStatusItem?
-
-// Helper object to handle status item menu actions
-class CoffeinStatusMenuHandler: NSObject {
-    @objc func openMain(_ sender: Any?) {
-        NSApp.bringCoffeinToFront(sender)
-    }
-
-    @objc func quickTimerOff(_ sender: Any?) {
-        NotificationCenter.default.post(name: .coffeinQuickTimerPreset, object: 0 as TimeInterval)
-    }
-
-    @objc func quickTimer30(_ sender: Any?) {
-        NotificationCenter.default.post(name: .coffeinQuickTimerPreset, object: 30 * 60 as TimeInterval)
-    }
-
-    @objc func quickTimer60(_ sender: Any?) {
-        NotificationCenter.default.post(name: .coffeinQuickTimerPreset, object: 60 * 60 as TimeInterval)
-    }
-
-    @objc func quickTimer120(_ sender: Any?) {
-        NotificationCenter.default.post(name: .coffeinQuickTimerPreset, object: 2 * 60 * 60 as TimeInterval)
-    }
-
-    @objc func quickTimer180(_ sender: Any?) {
-        NotificationCenter.default.post(name: .coffeinQuickTimerPreset, object: 3 * 60 * 60 as TimeInterval)
-    }
-
-    @objc func openAbout(_ sender: Any?) {
-        // Forward to the app delegate's custom About panel
-        NSApp.sendAction(#selector(CoffeinAppDelegate.showAboutPanel(_:)), to: nil, from: sender)
-    }
-
-    @objc func quitApp(_ sender: Any?) {
-        NSApp.terminate(sender)
-    }
-}
-
-// Single shared handler for all status item menu actions
-let coffeinStatusMenuHandler = CoffeinStatusMenuHandler()
-
-/// Updates the menu bar icon & tooltip based on Coffein state
-/// - Parameters:
-///   - isAwake: Whether Coffein is currently preventing sleep
-///   - tooltip: Optional custom tooltip text. If nil, a default message is used.
-func updateCoffeinStatusItem(isAwake: Bool, tooltip: String? = nil) {
-    guard let button = coffeinStatusItem?.button else { return }
-
-    let defaultText = isAwake ? "Coffein: Active – your Mac won't sleep" : "Coffein – idle (Mac can sleep normally)"
-    let tip = tooltip ?? defaultText
-
-    // Always show an icon; switch glyph based on state
-    let symbol = isAwake ? "􀋦" : "􀋩"  // enabled / disabled icons
-    let font = NSFont.systemFont(ofSize: 15)
-    let attributed = NSAttributedString(string: symbol, attributes: [ .font: font ])
-
-    button.image = nil
-    button.title = ""
-    button.attributedTitle = attributed
-    button.toolTip = tip
-
-    // Keep the first menu item (state line) in sync with the tooltip text
-    if let menu = coffeinStatusItem?.menu, let first = menu.items.first {
-        first.title = tip
-    }
-}
 
 // Shared number formatters for hours and minutes (used in custom timer UI)
 fileprivate let hoursFormatter: NumberFormatter = {
@@ -222,7 +151,7 @@ struct ContentView: View {
         }
     }
     @Environment(\.colorScheme) private var colorScheme
-    @StateObject private var coffeinManager = CoffeinManager()
+    @EnvironmentObject var coffeinManager: CoffeinManager
     
     @State private var isPressing = false
     @State private var hoverClose = false
@@ -264,8 +193,8 @@ struct ContentView: View {
         // "ghost" area above the card where the default window chrome would be.
         .ignoresSafeArea(edges: .top)
         .onAppear {
-            // Sync current state to the status item
-            updateCoffeinStatusItem(isAwake: coffeinManager.isAwake, tooltip: statusTooltip)
+            // Post notification to update the status item
+            NotificationCenter.default.post(name: .coffeinUpdateStatusItem, object: nil, userInfo: ["isAwake": coffeinManager.isAwake])
 
             DispatchQueue.main.async {
                 if let window = NSApplication.shared.windows.first {
@@ -285,7 +214,7 @@ struct ContentView: View {
             isTimerExpanded = storedIsTimerExpanded
         }
         .onChange(of: coffeinManager.isAwake) {
-            updateCoffeinStatusItem(isAwake: coffeinManager.isAwake, tooltip: statusTooltip)
+            NotificationCenter.default.post(name: .coffeinUpdateStatusItem, object: nil, userInfo: ["isAwake": coffeinManager.isAwake])
 
             // If Coffein is turned off manually, any active timer should be paused.
             if !coffeinManager.isAwake {
@@ -303,7 +232,7 @@ struct ContentView: View {
             storedIsTimerExpanded = isTimerExpanded
         }
         .onChange(of: coffeinManager.timeRemaining, initial: false) {
-            updateCoffeinStatusItem(isAwake: coffeinManager.isAwake, tooltip: statusTooltip)
+            NotificationCenter.default.post(name: .coffeinUpdateStatusItem, object: nil, userInfo: ["isAwake": coffeinManager.isAwake])
         }
         .onChange(of: coffeinManager.sleepMode) {
             coffeinManager.sleepModeChanged()
@@ -877,33 +806,7 @@ struct ContentView: View {
 
     // MARK: - Timer helpers (UI)
 
-    /// Tooltip for the menu bar icon, reflecting current state and timer
-    private var statusTooltip: String {
-        if !coffeinManager.isAwake {
-            return "Coffein – idle (Mac can sleep normally)"
-        }
 
-        // If we have a live countdown, show remaining time
-        if coffeinManager.timeRemaining > 0 {
-            let secs = Int(coffeinManager.timeRemaining)
-            let hours = secs / 3600
-            let minutes = (secs % 3600) / 60
-
-            if hours > 0 {
-                return String(format: "Coffein: Active – Sleep in %dh %02dm", hours, minutes)
-            } else {
-                return String(format: "Coffein: Active – Sleep in %d min", minutes)
-            }
-        }
-
-        // If we only know the selected duration, use the summary text
-        if coffeinManager.initialDuration > 0 {
-            return "Coffein: Active – \(timerSummaryText)"
-        }
-
-        // Fallback
-        return "Coffein: Active – your Mac won't sleep"
-    }
 
     private var countdownDisplayText: String? {
         guard coffeinManager.isAwake, coffeinManager.timeRemaining > 0 else { return nil }
