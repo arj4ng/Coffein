@@ -461,7 +461,7 @@ struct ContentView: View {
                         Text(text)
                             .font(.system(size: 18, design: .monospaced).weight(.bold)) // Make font 50% smaller
                             .shadow(color: Color.green.opacity(0.8), radius: 5, x: 0, y: 0) // Enhanced subtle green glow
-                            .padding(.horizontal, 12)
+                            .padding(.horizontal, 6)
                             .padding(.vertical, 6)
                             .background(
                                 RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -481,11 +481,11 @@ struct ContentView: View {
                         Spacer()
                     }
                     .foregroundColor(.white) // Set text color to white
-                    .padding(.top, 8) // Adjusted padding
+                    .padding(.top, 6) // Adjusted padding
                 }
 
                 // Description
-                VStack(spacing: 8) { // Adjusted VStack spacing
+                VStack(spacing: 4) { // Adjusted VStack spacing
                     if coffeinManager.isActivationBlockedByBattery {
                         Text(createBatterySafetyMessage(threshold: coffeinManager.batteryDeactivationThreshold))
                             .multilineTextAlignment(.center) // Ensure centering
