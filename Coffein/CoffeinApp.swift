@@ -353,6 +353,7 @@ class CoffeinAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        print("[Coffein] applicationShouldTerminate - coffeinManager.isAwake: \(coffeinManager.isAwake)")
         if coffeinManager.isAwake {
             let alert = NSAlert()
             alert.messageText = "Coffein is active."

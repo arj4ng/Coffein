@@ -39,6 +39,8 @@ enum CoffeinSleepMode: String, CaseIterable {
 }
 
 class CoffeinManager: ObservableObject {
+    @AppStorage("isAwake") private var appStorageIsAwake: Bool = true
+    private var _sleepModeRaw: String
     // MARK: - Core State
     @Published var isAwake: Bool = true {
         didSet {
@@ -53,17 +55,16 @@ class CoffeinManager: ObservableObject {
         }
     }
     
-    // MARK: - App Storage
-    @AppStorage("isAwake") private var appStorageIsAwake: Bool = true
-    private var _sleepModeRaw: String
-
     // MARK: - Battery Safety Feature
     @Published var batteryDeactivationThreshold: Int {
         didSet {
             UserDefaults.standard.set(batteryDeactivationThreshold, forKey: "batteryDeactivationThreshold")
             print("[CoffeinManager] batteryDeactivationThreshold set to: \(batteryDeactivationThreshold)%")
+            checkActivationBlockedByBattery() // Trigger update when threshold changes
         }
     }
+    
+    @Published var isActivationBlockedByBattery: Bool = false
 
     // MARK: - Timer Properties
     @Published var timer: Timer?
@@ -99,6 +100,9 @@ class CoffeinManager: ObservableObject {
         
         // NEW: Start battery monitoring
         startBatteryMonitoring()
+        
+        // Initial check for battery activation block
+        checkActivationBlockedByBattery()
     }
 
     deinit {
@@ -119,18 +123,22 @@ class CoffeinManager: ObservableObject {
         }
 
         for powerSource in powerSourceList {
-            // Convert the CFDictionary to a Swift Dictionary
             guard let powerSourceDict = powerSource as? [String: Any] else {
                 continue
             }
 
-            // Check if it's a battery using the string literal
-            if let isBattery = powerSourceDict["Is Battery"] as? Bool, isBattery {
-                // Get current and max capacity using string literals
+            // Check if 'Type' is "InternalBattery" or if "Battery Provides Time Remaining" is 1
+            if let type = powerSourceDict["Type"] as? String, type == "InternalBattery" {
                 if let currentCapacity = powerSourceDict["Current Capacity"] as? Int,
                    let maxCapacity = powerSourceDict["Max Capacity"] as? Int,
                    maxCapacity > 0 {
-                    
+                    let batteryLevel = (Double(currentCapacity) / Double(maxCapacity)) * 100
+                    return Int(batteryLevel)
+                }
+            } else if let providesTimeRemaining = powerSourceDict["Battery Provides Time Remaining"] as? Int, providesTimeRemaining == 1 {
+                if let currentCapacity = powerSourceDict["Current Capacity"] as? Int,
+                   let maxCapacity = powerSourceDict["Max Capacity"] as? Int,
+                   maxCapacity > 0 {
                     let batteryLevel = (Double(currentCapacity) / Double(maxCapacity)) * 100
                     return Int(batteryLevel)
                 }
@@ -150,6 +158,7 @@ class CoffeinManager: ObservableObject {
                 stopTimer()
                 // Optionally, could show a notification to the user here
             }
+            checkActivationBlockedByBattery() // Update activation blocked status
         }
     }
 
@@ -168,7 +177,22 @@ class CoffeinManager: ObservableObject {
     // MARK: - Core Logic
     func toggleAwake() {
         print("[CoffeinManager] toggleAwake() called")
+        if isActivationBlockedByBattery {
+            print("[CoffeinManager] Activation blocked by battery safety. Cannot toggle awake.")
+            return // Do not proceed if activation is blocked
+        }
         isAwake.toggle()
+    }
+
+    // NEW: Private function to update activation blocked status
+    private func checkActivationBlockedByBattery() {
+        if batteryDeactivationThreshold > 0, let currentBatteryPercentage = getBatteryLevel() {
+            isActivationBlockedByBattery = currentBatteryPercentage <= batteryDeactivationThreshold
+            print("[CoffeinManager] isActivationBlockedByBattery: \(isActivationBlockedByBattery) (current: \(currentBatteryPercentage)%, threshold: \(batteryDeactivationThreshold)%)")
+        } else {
+            isActivationBlockedByBattery = false // Feature is off or no battery info
+            print("[CoffeinManager] isActivationBlockedByBattery: \(isActivationBlockedByBattery) (feature off or no battery info)")
+        }
     }
     
     func sleepModeChanged() {

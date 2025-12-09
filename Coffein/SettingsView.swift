@@ -28,14 +28,14 @@ struct SettingsView: View {
         ZStack {
             SettingsBackground(colorScheme: colorScheme)
             
-            VStack(alignment: .leading, spacing: 16) { // Adjusted VStack spacing
+            VStack(alignment: .leading, spacing: 12) { // Adjusted VStack spacing
                 SettingsHeaderView(colorScheme: colorScheme, onClose: onClose)
                 
                 Text("General")
                     .font(.headline) // Changed to headline style
                     .textCase(.uppercase)
                     .foregroundColor(.secondary)
-                    .padding(.top, 16) // Adjusted padding
+                    .padding(.top, 8) // Adjusted padding
                 
                 SettingsGeneralSection(colorScheme: colorScheme, launchAtLogin: $coffeinManager.launchAtLogin)
                 
@@ -43,7 +43,7 @@ struct SettingsView: View {
                     .font(.headline) // Changed to headline style
                     .textCase(.uppercase)
                     .foregroundColor(.secondary)
-                    .padding(.top, 16) // Adjusted padding
+                    .padding(.top, 8) // Adjusted padding
                 
                 SettingsAppearanceSection(themeModeBinding: themeModeBinding)
                 
@@ -51,7 +51,7 @@ struct SettingsView: View {
                     .font(.headline) // Changed to headline style
                     .textCase(.uppercase)
                     .foregroundColor(.secondary)
-                    .padding(.top, 16) // Adjusted padding
+                    .padding(.top, 8) // Adjusted padding
                 
                 SettingsPowerSection(selectedMode: $coffeinManager.sleepMode)
 
@@ -59,14 +59,14 @@ struct SettingsView: View {
                     .font(.headline)
                     .textCase(.uppercase)
                     .foregroundColor(.secondary)
-                    .padding(.top, 16)
+                    .padding(.top, 8)
                 
                 SettingsBatterySafetySection(batteryDeactivationThreshold: $coffeinManager.batteryDeactivationThreshold)
                 
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 20) // Adjusted horizontal padding
-            .padding(.vertical, 16) // Adjusted vertical padding
+            .padding(.vertical, 12) // Adjusted vertical padding
             .onAppear {
                 coffeinManager.checkLaunchAtLogin()
             }
@@ -320,25 +320,17 @@ private struct SettingsBatterySafetySection: View {
                         Text("Deactivate Coffein when battery is below:")
                             .font(.body)
                         Spacer()
-                        Text("\(batteryDeactivationThreshold)%")
-                            .font(.body.monospacedDigit())
+                        Picker("Deactivation Threshold", selection: $batteryDeactivationThreshold) {
+                            ForEach(0..<101, id: \.self) { percentage in
+                                if percentage % 5 == 0 { // 5% increments
+                                    Text("\(percentage)%").tag(percentage)
+                                }
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .labelsHidden()
+                        .controlSize(.small)
                     }
-                    
-                    Slider(
-                        value: Binding(
-                            get: { Double(batteryDeactivationThreshold) },
-                            set: { batteryDeactivationThreshold = Int($0) }
-                        ),
-                        in: 0...100,
-                        step: 5
-                    ) {
-                        Text("Threshold")
-                    } minimumValueLabel: {
-                        Text("0%")
-                    } maximumValueLabel: {
-                        Text("100%")
-                    }
-                    .controlSize(.small)
                     
                     Text("Coffein will automatically deactivate and stop any active timers if your battery level drops below this percentage.")
                         .font(.subheadline)

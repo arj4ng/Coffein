@@ -375,13 +375,26 @@ struct ContentView: View {
                         // Soft pulsing ring when active
                         Circle()
                             .stroke(
-                                RadialGradient(
-                                    colors: coffeinManager.isAwake
-                                        ? [Color.green.opacity(0.6), Color.green.opacity(0.0)]
-                                        : [Color.gray.opacity(0.4), Color.clear],
-                                    center: .center,
-                                    startRadius: 0,
-                                    endRadius: 60
+                                coffeinManager.isActivationBlockedByBattery
+                                ? RadialGradient( // Now this is a RadialGradient too
+                                        colors: [Color.red.opacity(0.6), Color.red.opacity(0.0)],
+                                        center: .center,
+                                        startRadius: 0,
+                                        endRadius: 60
+                                    )
+                                : (coffeinManager.isAwake
+                                    ? RadialGradient(
+                                        colors: [Color.green.opacity(0.6), Color.green.opacity(0.0)],
+                                        center: .center,
+                                        startRadius: 0,
+                                        endRadius: 60
+                                    )
+                                    : RadialGradient(
+                                        colors: [Color.gray.opacity(0.4), Color.clear],
+                                        center: .center,
+                                        startRadius: 0,
+                                        endRadius: 60
+                                    )
                                 ),
                                 lineWidth: 2
                             )
@@ -389,7 +402,7 @@ struct ContentView: View {
                             .opacity(coffeinManager.isAwake ? 1 : 0.5)
                             .scaleEffect(coffeinManager.isAwake ? 1.05 : 1.0)
                             .animation(
-                                coffeinManager.isAwake
+                                coffeinManager.isAwake && !coffeinManager.isActivationBlockedByBattery // Only animate if awake AND not blocked
                                 ? .easeInOut(duration: 1.2).repeatForever(autoreverses: true)
                                 : .default,
                                 value: coffeinManager.isAwake
@@ -397,7 +410,16 @@ struct ContentView: View {
 
                         // Main button fill: static when idle, liquid gradient when active
                         Group {
-                            if coffeinManager.isAwake {
+                            if coffeinManager.isActivationBlockedByBattery {
+                                Circle()
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [Color.red.opacity(0.45), Color.red.opacity(0.25)],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        )
+                                    )
+                            } else if coffeinManager.isAwake {
                                 LiquidGradientCircle(timerIntensity: timerIntensity)
                             } else {
                                 Circle()
@@ -411,16 +433,16 @@ struct ContentView: View {
                             }
                         }
                         .frame(width: 84, height: 84)
-                        .shadow(color: coffeinManager.isAwake ? Color.green.opacity(0.7) : Color.black.opacity(0.6),
-                                radius: coffeinManager.isAwake ? 18 : 10,
-                                x: 0, y: coffeinManager.isAwake ? 10 : 6)
+                        .shadow(color: coffeinManager.isAwake && !coffeinManager.isActivationBlockedByBattery ? Color.green.opacity(0.7) : Color.black.opacity(0.6), // Shadow based on active and not blocked
+                                radius: coffeinManager.isAwake && !coffeinManager.isActivationBlockedByBattery ? 18 : 10,
+                                x: 0, y: coffeinManager.isAwake && !coffeinManager.isActivationBlockedByBattery ? 10 : 6)
                         .overlay(
                             Circle()
                                 .stroke(Color.white.opacity(0.35), lineWidth: 1)
                         )
 
                         // Icon
-                        Image(systemName: coffeinManager.isAwake ? "bolt.circle.fill" : "bolt.circle")
+                        Image(systemName: coffeinManager.isAwake && !coffeinManager.isActivationBlockedByBattery ? "bolt.circle.fill" : "bolt.circle")
                             .font(.system(size: 54, weight: .regular))
                             .foregroundColor(.white)
                     }
@@ -429,6 +451,8 @@ struct ContentView: View {
                 .buttonStyle(.plain)
                 .pressEvents(onPress: { isPressing = true },
                              onRelease: { isPressing = false })
+                .disabled(coffeinManager.isActivationBlockedByBattery) // Disable if blocked
+                .help(coffeinManager.isActivationBlockedByBattery ? "Cannot activate Coffein due to low battery safety setting. Current battery below \(coffeinManager.batteryDeactivationThreshold)%" : "") // Tooltip
 
                 // Countdown display (only when a timer is active)
                 if let text = countdownDisplayText {
@@ -462,13 +486,30 @@ struct ContentView: View {
 
                 // Description
                 VStack(spacing: 8) { // Adjusted VStack spacing
-                    Text(coffeinManager.isAwake ? "Your Mac won't sleep while activated" : "Your Mac can sleep normally")
-                        .font(.body.weight(.medium)) // Using body style and medium weight
+                    if coffeinManager.isActivationBlockedByBattery {
+                        Text(createBatterySafetyMessage(threshold: coffeinManager.batteryDeactivationThreshold))
+                            .multilineTextAlignment(.center) // Ensure centering
+                            .environment(\.openURL, OpenURLAction { url in // Correct usage
+                                if url.scheme == "coffien-app" && url.host == "settings" {
+                                    var t = Transaction()
+                                    t.disablesAnimations = true
+                                    withTransaction(t) {
+                                        isShowingSettings = true
+                                    }
+                                    return .handled
+                                }
+                                return .systemAction
+                            })
+                    } else {
+                        Text(textForDescription)
+                            .multilineTextAlignment(.center) // Ensure centering for other states too
+                    }
                     Text("Powered by native macOS power assertions to keep your Mac from dozing off.")
                         .font(.subheadline) // Using subheadline style
                         .foregroundColor(colorScheme == .dark ? .secondary : .primary.opacity(0.7))
                         .multilineTextAlignment(.center)
                 }
+                .font(.body.weight(.medium)) // Apply font here to affect both Text elements
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 8) // Adjusted padding
 
@@ -809,6 +850,14 @@ struct ContentView: View {
 
 
 
+    private var textForDescription: String {
+        if coffeinManager.isAwake {
+            return "Your Mac won't sleep while activated"
+        } else {
+            return "Your Mac can sleep normally"
+        }
+    }
+
     private var countdownDisplayText: String? {
         guard coffeinManager.isAwake, coffeinManager.timeRemaining > 0 else { return nil }
         let seconds = Int(coffeinManager.timeRemaining)
@@ -877,6 +926,20 @@ struct ContentView: View {
         } else {
             coffeinManager.stopTimer()
         }
+    }
+
+    // Helper to create AttributedString for battery safety message with inline link
+    private func createBatterySafetyMessage(threshold: Int) -> AttributedString {
+        var attributedString = AttributedString("Cannot activate Coffein: battery below threshold (\(threshold)%) ")
+        
+        var linkString = AttributedString("Open Settings")
+        linkString.link = URL(string: "coffien-app://settings") // Custom URL to trigger settings
+        linkString.foregroundColor = .accentColor // Using accentColor for consistency
+        linkString.font = .body.weight(.medium) // Match parent font weight
+        
+        attributedString.append(linkString)
+        
+        return attributedString
     }
 }
 
