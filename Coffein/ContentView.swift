@@ -272,24 +272,25 @@ struct ContentView: View {
                             guard let window = mainWindow() else { return }
 
                             if coffeinManager.isAwake {
-                                // Active: just minimize
-                                window.miniaturize(nil)
-                            } else {
-                                // Idle: ask before quitting; if cancelled, just hide the window
+                                // Coffein is active: ask whether to quit or minimize
                                 let alert = NSAlert()
-                                alert.messageText = "Quit Coffein?"
-                                alert.informativeText = "Coffein is idle. Do you want to quit the app? You can also cancel to simply hide the window and keep the menu bar item."
+                                alert.messageText = "Coffein is active."
+                                alert.informativeText = "Do you want to quit the app? Your Mac will be allowed to sleep. Or you can minimize the window to keep Coffein running in the background."
                                 alert.alertStyle = .warning
                                 alert.addButton(withTitle: "Quit")
-                                alert.addButton(withTitle: "Cancel")
+                                alert.addButton(withTitle: "Minimize")
+                                alert.addButton(withTitle: "Cancel") // Keep cancel for safety
 
                                 let response = alert.runModal()
-                                if response == .alertFirstButtonReturn {
+                                if response == .alertFirstButtonReturn { // Quit
                                     NSApp.terminate(nil)
-                                } else {
-                                    // Cancel: hide the window (order out) to keep process/state alive
-                                    window.orderOut(nil)
+                                } else if response == .alertSecondButtonReturn { // Minimize
+                                    window.miniaturize(nil)
                                 }
+                                // If Cancel is chosen, do nothing, window remains open
+                            } else {
+                                // Coffein is idle: just quit without confirmation
+                                NSApp.terminate(nil)
                             }
                         }
 
