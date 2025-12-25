@@ -223,15 +223,6 @@ class CoffeinAppDelegate: NSObject, NSApplicationDelegate {
         window.makeKeyAndOrderFront(nil)
     }
 
-    func applicationWillBecomeActive(_ notification: Notification) {
-        // Reassert the custom menu after SwiftUI finishes any scene/menu rebuild during restore.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            if let menu = self.mainMenuRef {
-                NSApp.mainMenu = menu
-            }
-        }
-    }
-
     func applicationDidFinishLaunching(_ notification: Notification) {
         let mainMenu = NSMenu()
 
@@ -265,6 +256,9 @@ class CoffeinAppDelegate: NSObject, NSApplicationDelegate {
         appMenu.addItem(quitItem)
 
         self.coffeinStatusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+
+        // Configure the handler that bridges the manager's state to the UI.
+        self.coffeinStatusMenuHandler.configure(with: self.coffeinManager)
 
         // The CoffeinManager now handles its own state restoration via @AppStorage
         // and its init method. We only need to read the initial state for the menu bar.
@@ -335,8 +329,6 @@ class CoffeinAppDelegate: NSObject, NSApplicationDelegate {
 
         // Install as the app's main menu, replacing the default SwiftUI menus
         NSApp.mainMenu = self.mainMenuRef
-
-        print("[Coffein] applicationDidFinishLaunching – installed custom main menu")
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
@@ -405,23 +397,17 @@ struct CoffeinApp: App {
         .windowToolbarStyle(.unifiedCompact)
         .windowResizability(.contentSize)
         .commands {
-            // Remove 'File' menu items
+            // Suppress all default SwiftUI menu commands to ensure our AppKit menu is supreme.
             CommandGroup(replacing: .newItem) { }
             CommandGroup(replacing: .saveItem) { }
             CommandGroup(replacing: .printItem) { }
-
-            // Remove 'Edit' menu items
-            CommandGroup(replacing: .pasteboard) { } // Covers Cut, Copy, Paste
+            CommandGroup(replacing: .pasteboard) { } // Covers Cut, Copy, Paste, Find etc.
             CommandGroup(replacing: .undoRedo) { }
-
-            // Remove 'Window' menu items
             CommandGroup(replacing: .windowArrangement) { }
             CommandGroup(replacing: .windowSize) { }
             CommandGroup(replacing: .windowList) { }
-
-            // Other default command groups
-            CommandGroup(replacing: .appSettings) { } // If present
-            CommandGroup(replacing: .help) { } // If you wish to remove the default Help menu
+            CommandGroup(replacing: .appSettings) { }
+            CommandGroup(replacing: .help) { }
         }
     }
 }
