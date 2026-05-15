@@ -14,8 +14,6 @@ import Combine
 
 extension Notification.Name {
     static let coffeinForceStop        = Notification.Name("coffeinForceStop")
-    static let coffeinQuickTimerPreset = Notification.Name("coffeinQuickTimerPreset")
-    static let coffeinUpdateStatusItem = Notification.Name("coffeinUpdateStatusItem") // New notification for status item updates
 }
 
 
@@ -32,15 +30,6 @@ class CoffeinStatusMenuHandler: NSObject, ObservableObject {
 
     func configure(with manager: CoffeinManager) {
         self.coffeinManager = manager
-
-        NotificationCenter.default.publisher(for: .coffeinUpdateStatusItem)
-            .sink { [weak self] notification in
-                guard let self = self else { return }
-                if let isAwake = notification.userInfo?["isAwake"] as? Bool {
-                    self.updateStatusItem(isAwake: isAwake, tooltip: self.statusTooltip)
-                }
-            }
-            .store(in: &cancellables)
 
         // Set up observers for coffeinManager properties
         coffeinManager.$isAwake
@@ -115,7 +104,8 @@ class CoffeinStatusMenuHandler: NSObject, ObservableObject {
     }
 
     @objc func openAbout(_ sender: Any?) {
-        NSApp.sendAction(#selector(CoffeinAppDelegate.showAboutPanel(_:)), to: nil, from: sender)
+        // Use the delegate method to show the panel
+        (NSApp.delegate as? CoffeinAppDelegate)?.showAboutPanel(sender)
     }
 
     @objc func quitApp(_ sender: Any?) {
@@ -172,8 +162,52 @@ class CoffeinAppDelegate: NSObject, NSApplicationDelegate {
     var coffeinStatusMenuHandler: CoffeinStatusMenuHandler!
 
     private var aboutWindow: NSWindow?
-    private var mainMenuRef: NSMenu?
+    private var mainMenuRef: NSMenu? // Re-introducing mainMenuRef
     private var coffeinStatusItem: NSStatusItem?
+    private var windowNotificationObservers: [NSObjectProtocol] = []
+
+    deinit {
+        for observer in windowNotificationObservers {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+
+    private func reassertMainMenu() {
+        guard let menu = mainMenuRef else { return }
+        if NSApp.mainMenu !== menu {
+            NSApp.mainMenu = menu
+        }
+    }
+
+    private func scheduleMainMenuReassertion() {
+        reassertMainMenu()
+        DispatchQueue.main.async { [weak self] in
+            self?.reassertMainMenu()
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self] in
+            self?.reassertMainMenu()
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+            self?.reassertMainMenu()
+        }
+    }
+
+    private func installMainMenuReassertObservers() {
+        let center = NotificationCenter.default
+        let names: [Notification.Name] = [
+            NSWindow.didMiniaturizeNotification,
+            NSWindow.didDeminiaturizeNotification,
+            NSWindow.didBecomeMainNotification,
+            NSWindow.didResignMainNotification
+        ]
+
+        for name in names {
+            let observer = center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                self?.scheduleMainMenuReassertion()
+            }
+            windowNotificationObservers.append(observer)
+        }
+    }
 
     func application(_ application: NSApplication,
                      shouldSaveApplicationState coder: NSCoder) -> Bool {
@@ -223,7 +257,12 @@ class CoffeinAppDelegate: NSObject, NSApplicationDelegate {
         window.makeKeyAndOrderFront(nil)
     }
 
+    func applicationWillBecomeActive(_ notification: Notification) {
+        scheduleMainMenuReassertion()
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Manually create the main menu in AppKit.
         let mainMenu = NSMenu()
 
         // Top-level Coffein app menu
@@ -255,13 +294,17 @@ class CoffeinAppDelegate: NSObject, NSApplicationDelegate {
         quitItem.target = NSApp
         appMenu.addItem(quitItem)
 
+        // Store a reference to our custom menu.
+        self.mainMenuRef = mainMenu
+
+        // Install it as the app's main menu.
+        NSApp.mainMenu = self.mainMenuRef
+        installMainMenuReassertObservers()
+        scheduleMainMenuReassertion()
+
+        // Create and configure the status bar item (menu bar icon).
         self.coffeinStatusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-
-        // Configure the handler that bridges the manager's state to the UI.
         self.coffeinStatusMenuHandler.configure(with: self.coffeinManager)
-
-        // The CoffeinManager now handles its own state restoration via @AppStorage
-        // and its init method. We only need to read the initial state for the menu bar.
         let storedIsAwake = UserDefaults.standard.bool(forKey: "isAwake")
 
         if let button = self.coffeinStatusItem?.button {
@@ -271,49 +314,34 @@ class CoffeinAppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let menu = NSMenu()
-
-        // First line: current state/tooltip (disabled)
         let initialTip = storedIsAwake ? "Coffein: Active – your Mac won't sleep" : "Coffein – idle (Mac can sleep normally)"
         let stateItem = NSMenuItem(title: initialTip, action: nil, keyEquivalent: "")
         stateItem.isEnabled = false
         menu.addItem(stateItem)
         menu.addItem(NSMenuItem.separator())
-
-        // Open main UI
         let openItem = NSMenuItem(title: "Open Coffein", action: #selector(self.coffeinStatusMenuHandler.openMain(_:)), keyEquivalent: "")
         openItem.target = self.coffeinStatusMenuHandler
         menu.addItem(openItem)
-
         menu.addItem(NSMenuItem.separator())
-
-        // Quick timer presets from the menu
         let offItem = NSMenuItem(title: "Timer Off", action: #selector(self.coffeinStatusMenuHandler.quickTimerOff(_:)), keyEquivalent: "")
         offItem.target = self.coffeinStatusMenuHandler
         menu.addItem(offItem)
-
         let t30 = NSMenuItem(title: "30 min", action: #selector(self.coffeinStatusMenuHandler.quickTimer30(_:)), keyEquivalent: "")
         t30.target = self.coffeinStatusMenuHandler
         menu.addItem(t30)
-
         let t60 = NSMenuItem(title: "1 hour", action: #selector(self.coffeinStatusMenuHandler.quickTimer60(_:)), keyEquivalent: "")
         t60.target = self.coffeinStatusMenuHandler
         menu.addItem(t60)
-
         let t120 = NSMenuItem(title: "2 hours", action: #selector(self.coffeinStatusMenuHandler.quickTimer120(_:)), keyEquivalent: "")
         t120.target = self.coffeinStatusMenuHandler
         menu.addItem(t120)
-
         let t180 = NSMenuItem(title: "3 hours", action: #selector(self.coffeinStatusMenuHandler.quickTimer180(_:)), keyEquivalent: "")
         t180.target = self.coffeinStatusMenuHandler
         menu.addItem(t180)
-
         menu.addItem(NSMenuItem.separator())
-
-        // About + Quit
         let statusMenuAboutItem = NSMenuItem(title: "About Coffein", action: #selector(self.coffeinStatusMenuHandler.openAbout(_:)), keyEquivalent: "")
         statusMenuAboutItem.target = self.coffeinStatusMenuHandler
         menu.addItem(statusMenuAboutItem)
-
         let statusMenuQuitItem = NSMenuItem(title: "Quit Coffein", action: #selector(self.coffeinStatusMenuHandler.quitApp(_:)), keyEquivalent: "q")
         statusMenuQuitItem.target = self.coffeinStatusMenuHandler
         menu.addItem(statusMenuQuitItem)
@@ -324,20 +352,10 @@ class CoffeinAppDelegate: NSObject, NSApplicationDelegate {
         } else {
             print("[Coffein] ERROR: NSStatusItem could not be created or is nil.")
         }
-
-        self.mainMenuRef = mainMenu
-
-        // Install as the app's main menu, replacing the default SwiftUI menus
-        NSApp.mainMenu = self.mainMenuRef
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
-        // Reassert the custom menu after SwiftUI finishes any scene/menu rebuild during restore.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            if let menu = self.mainMenuRef {
-                NSApp.mainMenu = menu
-            }
-        }
+        scheduleMainMenuReassertion()
         // Explicitly update the status item to ensure its state is current after the app becomes active.
         self.coffeinStatusMenuHandler.updateStatusItem(
             isAwake: self.coffeinManager.isAwake // Rely on internal statusTooltip calculation
@@ -385,7 +403,6 @@ struct CoffeinApp: App {
     init() {
         appDelegate.coffeinManager = coffeinManager
         appDelegate.coffeinStatusMenuHandler = coffeinStatusMenuHandler
-        // NOTE: If configure is needed, call it from applicationDidFinishLaunching in the delegate.
     }
 
     var body: some Scene {
@@ -397,119 +414,8 @@ struct CoffeinApp: App {
         .windowToolbarStyle(.unifiedCompact)
         .windowResizability(.contentSize)
         .commands {
-            // Suppress all default SwiftUI menu commands to ensure our AppKit menu is supreme.
-            CommandGroup(replacing: .newItem) { }
-            CommandGroup(replacing: .saveItem) { }
-            CommandGroup(replacing: .printItem) { }
-            CommandGroup(replacing: .pasteboard) { } // Covers Cut, Copy, Paste, Find etc.
-            CommandGroup(replacing: .undoRedo) { }
-            CommandGroup(replacing: .windowArrangement) { }
-            CommandGroup(replacing: .windowSize) { }
-            CommandGroup(replacing: .windowList) { }
-            CommandGroup(replacing: .appSettings) { }
-            CommandGroup(replacing: .help) { }
+            // Empty commands block to prevent SwiftUI from generating any menus.
+            // AppKit will handle the main menu entirely.
         }
-    }
-}
-
-
-// MARK: - AboutView
-
-fileprivate struct AboutView: View {
-    @Environment(\.colorScheme) private var colorScheme
-
-    private var appName: String {
-        ProcessInfo.processInfo.processName
-    }
-
-    private var versionString: String {
-        let info = Bundle.main.infoDictionary
-        let version = info?["CFBundleShortVersionString"] as? String ?? "1.0"
-        let build = info?["CFBundleVersion"] as? String ?? ""
-        return build.isEmpty ? "Version \(version)" : "Version \(version) (\(build))"
-    }
-
-    var body: some View {
-        ZStack {
-            // Subtle background to match the main app’s style
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(
-                    colorScheme == .dark
-                    ? Color.white.opacity(0.00)
-                    : Color.black.opacity(0.00)
-                )
-                .background(.ultraThinMaterial)
-                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-
-            VStack(spacing: 16) {
-                // App icon + name
-                if let icon = NSApp.applicationIconImage {
-                    Image(nsImage: icon)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(width: 56, height: 100)
-                        .cornerRadius(12)
-                        .shadow(radius: 8, y: 4)
-                }
-
-                VStack(spacing: 4) {
-                    Text(appName)
-                        .font(.system(size: 20, weight: .semibold, design: .rounded))
-
-                    Text(versionString)
-                        .font(.system(size: 13, weight: .regular))
-                        .foregroundColor(
-                            colorScheme == .dark
-                            ? .secondary
-                            : .primary.opacity(0.7)
-                        )
-                }
-
-                VStack(spacing: 6) {
-                    Text("Keep your Mac wide awake")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.primary)
-
-                    Text("Coffein uses macOS power assertions under the hood, in a clean, focused UI, so you can stop your Mac from falling asleep during long renders, uploads, gaming sessions or late‑night coding—without relying on the old “caffeinate” command.")
-                        .font(.system(size: 13))
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .foregroundColor(
-                            colorScheme == .dark
-                            ? .secondary
-                            : .primary.opacity(0.75)
-                        )
-                        .padding(.horizontal, 6)
-                }
-                .padding(.top, 4)
-
-                Divider()
-                    .padding(.horizontal, 8)
-                    .padding(.top, 2)
-
-                VStack(spacing: 2) {
-                    Text("Made by arj4ng")
-                        .font(.system(size: 12, weight: .medium))
-
-                    Text("A new macOS app developer building tiny tools for real‑world workflows.")
-                        .font(.system(size: 11))
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .foregroundColor(
-                            colorScheme == .dark
-                            ? .secondary
-                            : .primary.opacity(0.7)
-                        )
-                        .padding(.horizontal, 10)
-                }
-                .padding(.bottom, 2)
-
-                Spacer()
-            }
-            .padding(20)
-            .frame(maxWidth: 320)
-        }
-        .padding(8)
-        .frame(minWidth: 320, minHeight: 260)
     }
 }

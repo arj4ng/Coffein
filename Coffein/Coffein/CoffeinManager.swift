@@ -39,6 +39,11 @@ enum CoffeinSleepMode: String, CaseIterable {
 }
 
 class CoffeinManager: ObservableObject {
+    private enum TimerEndAction: String {
+        case deactivate
+        case sleep
+    }
+
     @AppStorage("isAwake") private var appStorageIsAwake: Bool = true
     private var _sleepModeRaw: String
     // MARK: - Core State
@@ -77,15 +82,22 @@ class CoffeinManager: ObservableObject {
     
     // NEW: For battery monitoring
     private var batteryMonitorTimer: AnyCancellable?
+    
+    private var selectedTimerEndAction: TimerEndAction {
+        let raw = UserDefaults.standard.string(forKey: "coffein_timerEndActionRaw") ?? ""
+        return TimerEndAction(rawValue: raw) ?? .deactivate
+    }
 
     init() {
         _sleepModeRaw = UserDefaults.standard.string(forKey: "sleepMode") ?? CoffeinSleepMode.systemAndDisplay.rawValue
         self.sleepMode = CoffeinSleepMode(rawValue: _sleepModeRaw) ?? .systemAndDisplay
         
-        // Initialize new batteryDeactivationThreshold
-        self.batteryDeactivationThreshold = UserDefaults.standard.integer(forKey: "batteryDeactivationThreshold")
-        if self.batteryDeactivationThreshold == 0 { // Default if not set, 0 is not a valid threshold
-            self.batteryDeactivationThreshold = 20 // Default to 20%
+        // Initialize battery threshold.
+        // If no value was saved yet, default to 20.
+        if UserDefaults.standard.object(forKey: "batteryDeactivationThreshold") == nil {
+            self.batteryDeactivationThreshold = 20
+        } else {
+            self.batteryDeactivationThreshold = UserDefaults.standard.integer(forKey: "batteryDeactivationThreshold")
         }
         
         // Read initial state for isAwake directly from UserDefaults to avoid premature property wrapper access
@@ -158,8 +170,8 @@ class CoffeinManager: ObservableObject {
                 stopTimer()
                 // Optionally, could show a notification to the user here
             }
-            checkActivationBlockedByBattery() // Update activation blocked status
         }
+        checkActivationBlockedByBattery() // Update activation blocked status
     }
 
     private func startBatteryMonitoring() {
@@ -209,27 +221,18 @@ class CoffeinManager: ObservableObject {
     // MARK: - Timer Logic
     func startTimer(duration: TimeInterval) {
         print("[CoffeinManager] startTimer(duration: \(duration)) called")
+        guard duration > 0 else {
+            stopTimer()
+            return
+        }
+
         if !isAwake {
             isAwake = true
         }
 
         initialDuration = duration
         timeRemaining = duration
-        
-        timer?.invalidate()
-        
-        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            guard let self = self else { return }
-            
-            if self.timeRemaining > 0 {
-                self.timeRemaining -= 1
-            } else {
-                print("[CoffeinManager] Timer finished.")
-                self.isAwake = false
-                self.stopTimer()
-                self.macSleep()
-            }
-        }
+        startOrRestartTimerLoop()
     }
 
     func stopTimer() {
@@ -252,7 +255,35 @@ class CoffeinManager: ObservableObject {
             print("[CoffeinManager] No time remaining, not resuming.")
             return
         }
-        startTimer(duration: timeRemaining)
+        if !isAwake {
+            isAwake = true
+        }
+        startOrRestartTimerLoop()
+    }
+
+    private func startOrRestartTimerLoop() {
+        timer?.invalidate()
+        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+
+            if self.timeRemaining > 1 {
+                self.timeRemaining -= 1
+            } else {
+                self.handleTimerFinished()
+            }
+        }
+    }
+
+    private func handleTimerFinished() {
+        let endAction = selectedTimerEndAction
+        print("[CoffeinManager] Timer finished. End action: \(endAction.rawValue)")
+
+        stopTimer()
+        isAwake = false
+
+        if endAction == .sleep {
+            macSleep()
+        }
     }
 
     // MARK: - System Actions
@@ -361,5 +392,4 @@ class CoffeinSleepManager {
         }
     }
 }
-
 

@@ -191,9 +191,6 @@ struct ContentView: View {
         // "ghost" area above the card where the default window chrome would be.
         .ignoresSafeArea(edges: .top)
         .onAppear {
-            // Post notification to update the status item
-            NotificationCenter.default.post(name: .coffeinUpdateStatusItem, object: nil, userInfo: ["isAwake": coffeinManager.isAwake])
-
             DispatchQueue.main.async {
                 if let window = NSApplication.shared.windows.first {
                     window.titleVisibility = .hidden
@@ -212,8 +209,6 @@ struct ContentView: View {
             // isTimerExpanded = storedIsTimerExpanded
         }
         .onChange(of: coffeinManager.isAwake) {
-            NotificationCenter.default.post(name: .coffeinUpdateStatusItem, object: nil, userInfo: ["isAwake": coffeinManager.isAwake])
-
             // If Coffein is turned off manually, any active timer should be paused.
             if !coffeinManager.isAwake {
                 if coffeinManager.timer != nil {
@@ -229,22 +224,8 @@ struct ContentView: View {
         // .onChange(of: isTimerExpanded) {
         //     storedIsTimerExpanded = isTimerExpanded
         // }
-        .onChange(of: coffeinManager.timeRemaining, initial: false) {
-            NotificationCenter.default.post(name: .coffeinUpdateStatusItem, object: nil, userInfo: ["isAwake": coffeinManager.isAwake])
-        }
         .onChange(of: coffeinManager.sleepMode) {
             coffeinManager.sleepModeChanged()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .coffeinQuickTimerPreset)) { note in
-            guard let seconds = note.object as? TimeInterval else { return }
-
-            if seconds <= 0 {
-                // "Timer Off" was selected from the menu
-                coffeinManager.stopTimer()
-            } else {
-                // A preset was selected from the menu
-                coffeinManager.startTimer(duration: seconds)
-            }
         }
     }
 
@@ -1062,4 +1043,3 @@ private extension View {
         self.modifier(PressEventsModifier(onPress: onPress, onRelease: onRelease))
     }
 }
-
