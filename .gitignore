@@ -10,3 +10,8 @@
 DerivedData/
 build/
 
+
+# Local dev/planning notes (keep local, do not publish)
+Roadmap.txt
+memory.md
+steer button mapping.rtf
