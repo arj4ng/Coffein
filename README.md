@@ -1,95 +1,77 @@
-# Coffein
+<p align="center">
+  <img src="Coffein/Assets.xcassets/AppIcon.appiconset/1024x1024.png" alt="Coffein icon" width="110" />
+</p>
 
-Native macOS utility to keep your Mac awake on demand with a focused menu bar workflow, timers, and battery-aware safety controls.
+<h1 align="center">Coffein</h1>
+<p align="center">Native macOS utility to keep your Mac awake with timer controls and menu bar-first UX.</p>
 
-![Coffein App Icon](Coffein/Assets.xcassets/AppIcon.appiconset/1024x1024.png)
+## Overview
 
-## Why This Project
+Coffein is a SwiftUI + AppKit desktop utility that manages macOS sleep assertions through a clean UI and quick menu bar actions.  
+It is designed as a lightweight, native alternative to terminal-based sleep-prevention workflows.
 
-I built Coffein as a lightweight alternative to terminal-first sleep prevention workflows, with emphasis on:
-
-- Native macOS behavior (`SwiftUI` + `AppKit`)
-- Fast menu bar access
-- Clear and reversible power management
-- Safety controls for battery-powered usage
-
-## Features
+## Core Features
 
 - One-click awake/idle toggle
 - Sleep assertion modes:
   - System + Display
   - System only
   - Display only
-- Quick timer presets from UI and menu bar
-- Custom timer with selectable end action
-- Battery safety threshold that can block activation and auto-deactivate
+- Timer presets and custom timer
+- Configurable timer end behavior
+- Battery safety threshold (block activation / auto-deactivate)
 - Launch at login support
-- Custom status item tooltip and live timer state in menu bar
+- Live status updates in menu bar tooltip
 
 ## Architecture
 
-### UI Layer
+### UI
 
-- `Coffein/ContentView.swift`
-  - Main window UI
-  - Toggle interactions
-  - Timer controls
-  - Settings overlay
+- `Coffein/ContentView.swift`: main window, toggle flow, timer UI, settings overlay
+- `Coffein/SettingsView.swift`: power mode, theme, launch-at-login, battery safety
+- `Coffein/AboutView 2.swift`: About panel content
 
-- `Coffein/SettingsView.swift`
-  - Appearance, power behavior, battery threshold, login launch
-
-- `Coffein/AboutView 2.swift`
-  - About panel content used by the AppKit delegate
-
-### App Shell + Menu Bar Integration
+### App Shell and Menu Bar
 
 - `Coffein/CoffeinApp.swift`
-  - SwiftUI app entry point
-  - `NSApplicationDelegate` bridge
-  - Custom AppKit app menu creation
-  - Status bar item and menu lifecycle
-  - Reassertion logic for menu consistency across window state transitions
+  - SwiftUI app entry
+  - AppKit delegate bridge
+  - custom app menu and status item lifecycle
+  - menu reassertion logic for window-state transitions
 
-### Core Logic
+### Domain and System Integration
 
 - `Coffein/Coffein/CoffeinManager.swift`
-  - Source of truth for app state
-  - Timer state and transitions
-  - Battery threshold logic
-  - Sleep mode switching
-  - Launch-at-login management
+  - central app state
+  - timer lifecycle and end-action handling
+  - battery monitoring and activation gating
+  - launch-at-login wiring
 
 - `CoffeinSleepManager` (inside `CoffeinManager.swift`)
-  - Wraps `IOKit` power assertions:
-    - `kIOPMAssertPreventUserIdleSystemSleep`
-    - `kIOPMAssertPreventUserIdleDisplaySleep`
-  - Handles releasing assertions and optional system sleep action
+  - wraps `IOKit` sleep assertions
+  - creates/releases system and display sleep prevention assertions
 
-## Technical Highlights
+## Tech Stack
 
-- Uses native macOS power assertions instead of shelling out to `caffeinate`
-- Blends declarative SwiftUI state with AppKit menu bar control where needed
-- Includes battery-aware fail-safe behavior for laptop usage
-- Handles timer end actions and resume behavior consistently
+- Swift 5
+- SwiftUI
+- AppKit
+- Combine
+- IOKit (`IOPMAssertion*`)
+- ServiceManagement (`SMAppService`)
 
-## Build
+## Run Locally
 
-1. Open `Coffein.xcodeproj` in Xcode.
-2. Select the `Coffein` scheme.
+1. Open `Coffein.xcodeproj`.
+2. Select scheme `Coffein`.
 3. Build and run on macOS.
 
 ## Roadmap
 
-- Add automated tests for timer and battery logic
-- Add screenshot gallery and short demo GIF
-- Polish helper target integration and project organization
-
-## Screenshots
-
-Screenshots will be added soon.
+- Add targeted tests for timer and battery logic
+- Add screenshots/demo clip
+- Refine helper target integration
 
 ## License
 
-MIT License. See [LICENSE](LICENSE).
-
+MIT. See [LICENSE](LICENSE).
