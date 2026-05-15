@@ -3,43 +3,45 @@
 </p>
 
 <h1 align="center">Coffein</h1>
-<p align="center">Native macOS utility to keep your Mac awake with timer controls and menu bar-first UX.</p>
+<p align="center">A small native macOS app to keep your Mac awake when you need it, with quick timer controls and a menu bar workflow.</p>
 
 ## Overview
 
-Coffein is a SwiftUI + AppKit desktop utility that manages macOS sleep assertions through a clean UI and quick menu bar actions.  
-It is designed as a lightweight, native alternative to terminal-based sleep-prevention workflows.
+I built Coffein because I wanted something simpler than jumping to Terminal whenever I needed to prevent sleep.
+It gives you a clean native interface, fast menu bar access, and practical safety controls for laptop use.
 
-## Core Features
+Under the hood, it uses macOS power assertions through `IOKit` and combines `SwiftUI` with `AppKit` where the menu bar and window lifecycle need tighter control.
+
+## What It Does
 
 - One-click awake/idle toggle
-- Sleep assertion modes:
-  - System + Display
-  - System only
-  - Display only
+- Sleep assertion modes (`System + Display`, `System only`, `Display only`)
 - Timer presets and custom timer
 - Configurable timer end behavior
-- Battery safety threshold (block activation / auto-deactivate)
+- Battery safety threshold (can block activation and auto-deactivate)
 - Launch at login support
-- Live status updates in menu bar tooltip
+- Live menu bar tooltip updates
 
-## Architecture
+## Project Structure
 
 ### UI
 
-- `Coffein/ContentView.swift`: main window, toggle flow, timer UI, settings overlay
-- `Coffein/SettingsView.swift`: power mode, theme, launch-at-login, battery safety
-- `Coffein/AboutView 2.swift`: About panel content
+- `Coffein/ContentView.swift`  
+  Main window, awake toggle flow, timer controls, settings overlay.
+- `Coffein/SettingsView.swift`  
+  Theme, sleep mode, launch-at-login, battery safety threshold.
+- `Coffein/AboutView 2.swift`  
+  About panel content.
 
-### App Shell and Menu Bar
+### App Shell and Menu Bar Integration
 
 - `Coffein/CoffeinApp.swift`
-  - SwiftUI app entry
-  - AppKit delegate bridge
-  - custom app menu and status item lifecycle
-  - menu reassertion logic for window-state transitions
+  - SwiftUI app entry point
+  - `NSApplicationDelegate` bridge
+  - custom app menu + status item setup
+  - menu reassertion logic for minimize/restore transitions
 
-### Domain and System Integration
+### Core Logic
 
 - `Coffein/Coffein/CoffeinManager.swift`
   - central app state
@@ -51,7 +53,7 @@ It is designed as a lightweight, native alternative to terminal-based sleep-prev
   - wraps `IOKit` sleep assertions
   - creates/releases system and display sleep prevention assertions
 
-## Tech Stack
+## Stack
 
 - Swift 5
 - SwiftUI
@@ -60,17 +62,16 @@ It is designed as a lightweight, native alternative to terminal-based sleep-prev
 - IOKit (`IOPMAssertion*`)
 - ServiceManagement (`SMAppService`)
 
-## Run Locally
+## Running Locally
 
 1. Open `Coffein.xcodeproj`.
 2. Select scheme `Coffein`.
 3. Build and run on macOS.
 
-## Roadmap
+## Notes
 
-- Add targeted tests for timer and battery logic
-- Add screenshots/demo clip
-- Refine helper target integration
+- Screenshots/demo clip will be added.
+- Next technical step is adding tests around timer and battery behavior.
 
 ## License
 
