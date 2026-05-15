@@ -5,7 +5,8 @@
   <p><strong>A native macOS utility to keep your Mac awake, with clean controls and a menu bar-first workflow.</strong></p>
 
   <p>
-    <img src="https://img.shields.io/badge/platform-macOS-black?style=for-the-badge&logo=apple" alt="platform macOS" />
+    <img src="https://img.shields.io/badge/platform-black?style=for-the-badge" alt="platform" />
+    <img src="https://img.shields.io/badge-macOS-black?style=for-the-badge&logo=apple" alt="macOS" />
     <img src="https://img.shields.io/badge/built%20with-SwiftUI%20%2B%20AppKit-orange?style=for-the-badge&logo=swift" alt="SwiftUI + AppKit" />
     <img src="https://img.shields.io/badge/license-MIT-green?style=for-the-badge" alt="MIT License" />
   </p>
