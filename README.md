@@ -124,13 +124,6 @@ Coffein/
 
 ---
 
-## Visuals
-
-For now, the repo uses the app icon as branding.  
-Screenshots/demo clips can be added later.
-
----
-
 ## License
 
 MIT — see [LICENSE](LICENSE).
