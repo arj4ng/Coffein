@@ -68,6 +68,35 @@ The goal was simple: keep it lightweight, native, and fast to use from the menu 
 
 ---
 
+## Screenshots
+
+<div align="center">
+  <table>
+    <tr>
+      <td align="center">
+        <img src="assets/screenshots/sc1-main-dark.png" alt="Coffein main screen (dark)" height="260" /><br/>
+        <sub><strong>SC1:</strong> Main screen without extras</sub>
+      </td>
+      <td align="center">
+        <img src="assets/screenshots/sc2-main-extras.png" alt="Coffein main screen with extra controls" height="260" /><br/>
+        <sub><strong>SC2:</strong> Main page with extra settings</sub>
+      </td>
+    </tr>
+    <tr>
+      <td align="center">
+        <img src="assets/screenshots/sc3-main-light.png" alt="Coffein main screen (light)" height="260" /><br/>
+        <sub><strong>SC3:</strong> Main page with extras in light mode</sub>
+      </td>
+      <td align="center">
+        <img src="assets/screenshots/sc4-settings.png" alt="Coffein settings screen" height="260" /><br/>
+        <sub><strong>SC4:</strong> Settings</sub>
+      </td>
+    </tr>
+  </table>
+</div>
+
+---
+
 ## Settings & architecture highlights
 
 - **Sleep modes**
@@ -122,35 +151,6 @@ Coffein/
 │     └─ CoffeinManager.swift
 └─ CoffeinHelper/
 ```
-
----
-
-## Screenshots
-
-<div align="center">
-  <table>
-    <tr>
-      <td align="center">
-        <img src="assets/screenshots/sc1-main-dark.png" alt="Coffein main screen (dark)" height="260" /><br/>
-        <sub><strong>SC1:</strong> Main screen without extras</sub>
-      </td>
-      <td align="center">
-        <img src="assets/screenshots/sc2-main-extras.png" alt="Coffein main screen with extra controls" height="260" /><br/>
-        <sub><strong>SC2:</strong> Main page with extra settings</sub>
-      </td>
-    </tr>
-    <tr>
-      <td align="center">
-        <img src="assets/screenshots/sc3-main-light.png" alt="Coffein main screen (light)" height="260" /><br/>
-        <sub><strong>SC3:</strong> Main page with extras in light mode</sub>
-      </td>
-      <td align="center">
-        <img src="assets/screenshots/sc4-settings.png" alt="Coffein settings screen" height="260" /><br/>
-        <sub><strong>SC4:</strong> Settings</sub>
-      </td>
-    </tr>
-  </table>
-</div>
 
 ---
 
