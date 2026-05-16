@@ -116,7 +116,18 @@ The goal was simple: keep it lightweight, native, and fast to use from the menu 
 
 ---
 
-## Build & run
+## Download
+
+If you just want to use Coffein (no coding needed), download the latest installer from:
+
+**[Releases](https://github.com/arj4ng/Coffein/releases)**
+
+- File: `Coffein Shot.pkg`
+- Install by opening the `.pkg` and following the installer steps.
+
+---
+
+## Build from source (optional)
 
 ```bash
 # 1) Open the project
